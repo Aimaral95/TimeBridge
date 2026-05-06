@@ -1,0 +1,155 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1100 720" font-family="Inter, Helvetica, Arial, sans-serif">
+  <!-- ─────────── styles ─────────── -->
+  <defs>
+    <style>
+      .tier-bg     { fill: #f7f9fc; stroke: #c9d2e0; stroke-width: 1; rx: 8; ry: 8; }
+      .tier-label  { font-size: 12px; font-weight: 700; fill: #4b5b78; letter-spacing: .12em; text-transform: uppercase; }
+      .box         { fill: #ffffff; stroke: #2f6ad9; stroke-width: 1.5; rx: 6; ry: 6; }
+      .box-db      { fill: #ffffff; stroke: #16a34a; stroke-width: 1.5; rx: 6; ry: 6; }
+      .box-ext     { fill: #ffffff; stroke: #b08000; stroke-width: 1.5; stroke-dasharray: 4 3; rx: 6; ry: 6; }
+      .box-title   { font-size: 13px; font-weight: 700; fill: #0d1b2a; }
+      .box-sub     { font-size: 11px; fill: #4b5b78; }
+      .arrow       { stroke: #4b5b78; stroke-width: 1.4; fill: none; marker-end: url(#arrowhead); }
+      .arrow-back  { stroke: #92a0b8; stroke-width: 1.2; stroke-dasharray: 4 3; fill: none; marker-end: url(#arrowhead-light); }
+      .arrow-label { font-size: 10.5px; fill: #4b5b78; }
+      .title       { font-size: 18px; font-weight: 700; fill: #0d1b2a; }
+      .subtitle    { font-size: 12px; fill: #4b5b78; }
+    </style>
+    <marker id="arrowhead" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
+      <path d="M0,0 L10,5 L0,10 Z" fill="#4b5b78"/>
+    </marker>
+    <marker id="arrowhead-light" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
+      <path d="M0,0 L10,5 L0,10 Z" fill="#92a0b8"/>
+    </marker>
+  </defs>
+
+  <!-- title -->
+  <text x="40" y="38" class="title">TimeBridge — System Architecture</text>
+  <text x="40" y="58" class="subtitle">Three-tier web application: React SPA · Node/Express REST API · PostgreSQL.</text>
+
+  <!-- ───────── tier 1: client ───────── -->
+  <rect x="40"  y="90" width="1020" height="180" class="tier-bg"/>
+  <text x="56"  y="112" class="tier-label">Tier 1 — Client (browser)</text>
+
+  <!-- React SPA box -->
+  <rect x="60"  y="130" width="280" height="120" class="box"/>
+  <text x="75"  y="153" class="box-title">React SPA (Vite)</text>
+  <text x="75"  y="172" class="box-sub">• AuthContext (JWT in localStorage)</text>
+  <text x="75"  y="188" class="box-sub">• ScheduleContext / ToastContext</text>
+  <text x="75"  y="204" class="box-sub">• Pages: Dashboard, Schedule, Availability,</text>
+  <text x="75"  y="220" class="box-sub">  Overlap, Family, Profile, Settings</text>
+  <text x="75"  y="236" class="box-sub">• utils/ — overlap, icsParser, quietHours</text>
+
+  <!-- ICS import box -->
+  <rect x="370" y="130" width="220" height="80" class="box"/>
+  <text x="385" y="153" class="box-title">.ics import (in-browser)</text>
+  <text x="385" y="172" class="box-sub">utils/icsParser.js</text>
+  <text x="385" y="188" class="box-sub">RFC 5545 · VEVENT, RRULE BYDAY</text>
+  <text x="385" y="204" class="box-sub">→ recurring schedule_blocks</text>
+
+  <!-- Geolocation box (external) -->
+  <rect x="620" y="130" width="200" height="80" class="box-ext"/>
+  <text x="635" y="153" class="box-title">Browser Geolocation</text>
+  <text x="635" y="172" class="box-sub">navigator.geolocation</text>
+  <text x="635" y="188" class="box-sub">+ OpenStreetMap Nominatim</text>
+  <text x="635" y="204" class="box-sub">(reverse geocode)</text>
+
+  <!-- Expo mobile box -->
+  <rect x="850" y="130" width="190" height="80" class="box"/>
+  <text x="865" y="153" class="box-title">Expo mobile (subset)</text>
+  <text x="865" y="172" class="box-sub">React Native, Expo Router</text>
+  <text x="865" y="188" class="box-sub">• Schedule, Availability,</text>
+  <text x="865" y="204" class="box-sub">  Home (mirrors web)</text>
+
+  <!-- ───────── tier 2: backend ───────── -->
+  <rect x="40"  y="300" width="1020" height="200" class="tier-bg"/>
+  <text x="56"  y="322" class="tier-label">Tier 2 — Backend (Node.js + Express 5)</text>
+
+  <!-- API box -->
+  <rect x="60"  y="340" width="320" height="140" class="box"/>
+  <text x="75"  y="363" class="box-title">REST API (server.js)</text>
+  <text x="75"  y="382" class="box-sub">/register · /login · /me · /forgot-password</text>
+  <text x="75"  y="398" class="box-sub">/connections · /connections/invite · /join</text>
+  <text x="75"  y="414" class="box-sub">/availability · /availability/overlap?with=</text>
+  <text x="75"  y="430" class="box-sub">/schedule · DELETE /connections/:id</text>
+  <text x="75"  y="450" class="box-sub" font-style="italic">Express middleware: cors, json, authMiddleware</text>
+  <text x="75"  y="466" class="box-sub" font-style="italic">+ in-memory rate limiter (login/register/forgot)</text>
+
+  <!-- Auth box -->
+  <rect x="410" y="340" width="200" height="100" class="box"/>
+  <text x="425" y="363" class="box-title">Auth</text>
+  <text x="425" y="382" class="box-sub">jsonwebtoken (HS256, 7-day TTL)</text>
+  <text x="425" y="398" class="box-sub">bcrypt (cost 10) password hash</text>
+  <text x="425" y="414" class="box-sub">SHA-256 reset-token hashing</text>
+  <text x="425" y="430" class="box-sub">JWT_SECRET via .env</text>
+
+  <!-- Overlap algorithm box -->
+  <rect x="640" y="340" width="200" height="100" class="box"/>
+  <text x="655" y="363" class="box-title">Overlap algorithm</text>
+  <text x="655" y="382" class="box-sub">UTC ISO timestamps</text>
+  <text x="655" y="398" class="box-sub">Set intersection per pair</text>
+  <text x="655" y="414" class="box-sub">+ client-side coalesce into</text>
+  <text x="655" y="430" class="box-sub">  contiguous N-hour windows</text>
+
+  <!-- Email box (optional) -->
+  <rect x="870" y="340" width="170" height="100" class="box-ext"/>
+  <text x="885" y="363" class="box-title">SMTP (optional)</text>
+  <text x="885" y="382" class="box-sub">Nodemailer →</text>
+  <text x="885" y="398" class="box-sub">Gmail SMTP relay</text>
+  <text x="885" y="414" class="box-sub">Used for password</text>
+  <text x="885" y="430" class="box-sub">reset emails</text>
+
+  <!-- ───────── tier 3: data ───────── -->
+  <rect x="40" y="530" width="1020" height="160" class="tier-bg"/>
+  <text x="56" y="552" class="tier-label">Tier 3 — Data (PostgreSQL)</text>
+
+  <!-- Postgres box -->
+  <rect x="60"  y="570" width="280" height="100" class="box-db"/>
+  <text x="75"  y="593" class="box-title">PostgreSQL — TimeBridge DB</text>
+  <text x="75"  y="612" class="box-sub">node-postgres (pg) connection pool</text>
+  <text x="75"  y="628" class="box-sub">Parameterised SQL — no ORM</text>
+  <text x="75"  y="644" class="box-sub">Credentials via .env (PG* or DATABASE_URL)</text>
+
+  <!-- Tables list -->
+  <rect x="370" y="570" width="670" height="100" class="box-db"/>
+  <text x="385" y="593" class="box-title">Tables</text>
+  <text x="385" y="612" class="box-sub"><tspan font-weight="700">users</tspan> (id, name, email UNIQUE, password_hash, timezone, city, country, created_at)</text>
+  <text x="385" y="628" class="box-sub"><tspan font-weight="700">connections</tspan> (id, user_id, connected_user_id, invite_code UNIQUE, status, accepted_at)</text>
+  <text x="385" y="644" class="box-sub"><tspan font-weight="700">availability</tspan> (id, user_id, start_time TIMESTAMPTZ)</text>
+  <text x="385" y="660" class="box-sub"><tspan font-weight="700">schedule_blocks</tspan> (id, user_id, title, type, color, days TEXT[], start_time TIME, end_time TIME) · <tspan font-weight="700">password_resets</tspan></text>
+
+  <!-- ───────── arrows: client → backend ───────── -->
+  <path class="arrow" d="M 200 250 V 280 V 340"/>
+  <text x="210" y="294" class="arrow-label">HTTPS · JSON · Bearer JWT</text>
+
+  <path class="arrow-back" d="M 240 340 V 280 V 250"/>
+  <text x="250" y="320" class="arrow-label">JSON response</text>
+
+  <!-- arrow: geolocation external (just a label hint, not a real network arrow) -->
+  <path class="arrow" d="M 720 210 V 250 V 290"/>
+  <text x="725" y="270" class="arrow-label">fetch (CORS)</text>
+
+  <!-- arrow: expo mobile to backend -->
+  <path class="arrow" d="M 945 210 V 280 V 340"/>
+  <text x="785" y="280" class="arrow-label">same REST API</text>
+
+  <!-- arrows: backend → DB -->
+  <path class="arrow" d="M 220 480 V 510 V 570"/>
+  <text x="230" y="528" class="arrow-label">SQL via pg pool</text>
+
+  <path class="arrow-back" d="M 270 570 V 510 V 480"/>
+  <text x="280" y="555" class="arrow-label">rows</text>
+
+  <!-- arrow: SMTP external -->
+  <path class="arrow" d="M 955 440 V 490"/>
+  <text x="850" y="475" class="arrow-label">async email send</text>
+
+  <!-- legend -->
+  <g transform="translate(40, 700)">
+    <text x="0" y="0" class="subtitle">Legend:</text>
+    <rect x="55"  y="-10" width="14" height="14" class="box"/>     <text x="74"  y="1" class="box-sub">Internal component</text>
+    <rect x="200" y="-10" width="14" height="14" class="box-db"/>  <text x="219" y="1" class="box-sub">Database / persistence</text>
+    <rect x="370" y="-10" width="14" height="14" class="box-ext"/> <text x="389" y="1" class="box-sub">External / 3rd-party service</text>
+  </g>
+</svg>
