@@ -177,6 +177,8 @@ async function ensureSchema() {
     ALTER TABLE schedule_blocks
       ADD COLUMN IF NOT EXISTS tzid TEXT
   `);
+  await pool.query(`ALTER TABLE users ADD COLUMN IF NOT EXISTS city    TEXT`);
+  await pool.query(`ALTER TABLE users ADD COLUMN IF NOT EXISTS country TEXT`);
 
   // 2FA columns. Stored on users; secret is the base32-encoded TOTP shared
   // secret. We deliberately don't enforce 2fa_enabled at login yet — see
