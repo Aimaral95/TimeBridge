@@ -153,8 +153,37 @@ If you didn't request this, you can safely ignore this email.
 
 /* ── ensure tables we depend on ──────────── */
 async function ensureSchema() {
-  // Best-effort: create the tables we need if they don't exist.
-  // (Your existing users/connections/availability tables are left alone.)
+  // Best-effort: create the tables we need if they don't exist. This lets a
+  // brand-new hosted Postgres database boot without a separate migration step.
+  await pool.query(`
+    CREATE TABLE IF NOT EXISTS users (
+      id            SERIAL PRIMARY KEY,
+      name          TEXT NOT NULL,
+      email         TEXT NOT NULL UNIQUE,
+      password_hash TEXT NOT NULL,
+      timezone      TEXT NOT NULL,
+      created_at    TIMESTAMP NOT NULL DEFAULT NOW()
+    )
+  `);
+  await pool.query(`
+    CREATE TABLE IF NOT EXISTS connections (
+      id                SERIAL PRIMARY KEY,
+      user_id           INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+      connected_user_id INTEGER REFERENCES users(id) ON DELETE CASCADE,
+      invite_code       TEXT UNIQUE,
+      status            TEXT NOT NULL DEFAULT 'pending',
+      accepted_at       TIMESTAMP,
+      created_at        TIMESTAMP NOT NULL DEFAULT NOW()
+    )
+  `);
+  await pool.query(`
+    CREATE TABLE IF NOT EXISTS availability (
+      id         SERIAL PRIMARY KEY,
+      user_id    INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+      start_time TIMESTAMP NOT NULL
+    )
+  `);
+
   await pool.query(`
     CREATE TABLE IF NOT EXISTS password_resets (
       id          SERIAL PRIMARY KEY,
