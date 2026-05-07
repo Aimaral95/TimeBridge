@@ -16,6 +16,7 @@
 
 const DAY_KEYS = ['Sun','Mon','Tue','Wed','Thu','Fri','Sat']
 const SHORT_TO_INDEX = Object.fromEntries(DAY_KEYS.map((d, i) => [d, i]))
+const DAY_MS = 24 * 60 * 60 * 1000
 
 /** What does the wall-clock look like in `tzid` for the given UTC instant?
  *  Returns { dayKey: 'Mon'..'Sun', minutes: 0..1439 }.
@@ -54,4 +55,70 @@ export function browserTz() {
   try {
     return Intl.DateTimeFormat().resolvedOptions().timeZone || 'UTC'
   } catch { return 'UTC' }
+}
+
+export function datePartsInTz(date, tzid) {
+  const d = (date instanceof Date) ? date : new Date(date)
+  const parts = new Intl.DateTimeFormat('en-US', {
+    timeZone: tzid || browserTz(),
+    year: 'numeric',
+    month: '2-digit',
+    day: '2-digit',
+  }).formatToParts(d)
+  const o = Object.fromEntries(parts.map(p => [p.type, p.value]))
+  return {
+    year: Number(o.year),
+    month: Number(o.month),
+    day: Number(o.day),
+  }
+}
+
+function offsetMsAt(date, tzid) {
+  const parts = new Intl.DateTimeFormat('en-US', {
+    timeZone: tzid || browserTz(),
+    year: 'numeric',
+    month: '2-digit',
+    day: '2-digit',
+    hour: '2-digit',
+    minute: '2-digit',
+    second: '2-digit',
+    hour12: false,
+  }).formatToParts(date)
+  const o = Object.fromEntries(parts.map(p => [p.type, p.value]))
+  const asUtc = Date.UTC(
+    Number(o.year),
+    Number(o.month) - 1,
+    Number(o.day),
+    Number(o.hour) % 24,
+    Number(o.minute),
+    Number(o.second)
+  )
+  return asUtc - date.getTime()
+}
+
+export function zonedTimeToUtc(year, month, day, hour, minute, tzid) {
+  const guess = new Date(Date.UTC(year, month - 1, day, hour, minute, 0))
+  let utc = new Date(guess.getTime() - offsetMsAt(guess, tzid))
+  utc = new Date(guess.getTime() - offsetMsAt(utc, tzid))
+  return utc
+}
+
+export function weekStartDatesInTz(offset = 0, tzid) {
+  const now = new Date()
+  const { dayKey } = wallClockInTz(now, tzid)
+  const dayIndex = SHORT_TO_INDEX[dayKey] || 0
+  const today = datePartsInTz(now, tzid)
+  const sundayUtc = Date.UTC(today.year, today.month - 1, today.day) - dayIndex * DAY_MS + offset * 7 * DAY_MS
+
+  return Array.from({ length: 7 }, (_, i) => {
+    const localDate = new Date(sundayUtc + i * DAY_MS)
+    return zonedTimeToUtc(
+      localDate.getUTCFullYear(),
+      localDate.getUTCMonth() + 1,
+      localDate.getUTCDate(),
+      0,
+      0,
+      tzid
+    )
+  })
 }

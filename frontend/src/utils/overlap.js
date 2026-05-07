@@ -1,3 +1,5 @@
+import { wallClockInTz } from './tz.js'
+
 /* ─────────────────────────────────────────────────────────────────
    overlap.js — pure functions for the Overlap page.
 
@@ -26,6 +28,45 @@ export function sameFreeSet(a, b) {
   const ids = new Set(a.map(x => x.other_id))
   for (const c of b) if (!ids.has(c.other_id)) return false
   return true
+}
+
+export function inQuietWindowAt(isoOrDate, quiet, tzid) {
+  if (!quiet) return false
+  const { minutes } = wallClockInTz(isoOrDate, tzid)
+  return _minsInQuiet(minutes, quiet)
+}
+
+export function connectionAvailableAt(iso, slotSet, connection, { hideQuiet = true } = {}) {
+  if (!slotSet?.has(iso)) return false
+  if (!hideQuiet) return true
+  const otherQuiet = connection?.other_quiet_hours
+  if (!otherQuiet) return true
+  return !inQuietWindowAt(iso, otherQuiet, connection?.other_timezone || 'UTC')
+}
+
+export function buildOverlapRows({
+  mine = [],
+  connections = [],
+  theirs = {},
+  filterWith = null,
+  quiet = null,
+  userTz = 'UTC',
+  hideQuiet = true,
+} = {}) {
+  const rows = []
+  for (const iso of mine) {
+    const when = new Date(iso)
+    if (hideQuiet && inQuietWindowAt(when, quiet, userTz)) continue
+
+    const free = []
+    for (const c of connections) {
+      if (filterWith && c.other_id !== filterWith) continue
+      if (connectionAvailableAt(iso, theirs[c.other_id], c, { hideQuiet })) free.push(c)
+    }
+    if (free.length > 0) rows.push({ iso, when, free })
+  }
+  rows.sort((a, b) => a.when - b.when)
+  return rows
 }
 
 /**
@@ -116,8 +157,10 @@ export function scoreWindow(w, { now = new Date(), quietWindows = [] } = {}) {
     const cursor = new Date(w.when.getTime())
     let intrudes = false
     for (let h = 0; h < w.hours && !intrudes; h++) {
-      const mins = cursor.getHours() * 60 + cursor.getMinutes()
       for (const qw of quietWindows) {
+        const mins = qw.tzid
+          ? wallClockInTz(cursor, qw.tzid).minutes
+          : cursor.getHours() * 60 + cursor.getMinutes()
         if (_minsInQuiet(mins, qw)) { intrudes = true; break }
       }
       cursor.setTime(cursor.getTime() + HOUR_MS)

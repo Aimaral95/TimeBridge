@@ -1,5 +1,6 @@
 import { createContext, useContext, useState, useEffect } from 'react'
 import { api } from '../api/client'
+import { loadQuietHours, saveQuietHours, DEFAULT_QUIET } from '../utils/quietHours'
 
 const Ctx = createContext(null)
 
@@ -18,8 +19,19 @@ export function AuthProvider({ children }) {
 
     api.getMe()
       .then(d => {
-        setUser(d.user)
-        try { localStorage.setItem('tb_user', JSON.stringify(d.user)) } catch {}
+        const userData = d.user
+        const localQuiet = loadQuietHours(userData.id)
+        const serverQuiet = userData.quiet_hours || DEFAULT_QUIET
+        const hasLocalQuiet = localStorage.getItem(`tb_quiet_${userData.id}`)
+        const quiet_hours = hasLocalQuiet ? localQuiet : serverQuiet
+        const nextUser = { ...userData, quiet_hours }
+        if (hasLocalQuiet && (localQuiet.start !== serverQuiet.start || localQuiet.end !== serverQuiet.end)) {
+          api.updateQuietHours(localQuiet).catch(() => {})
+        } else {
+          saveQuietHours(userData.id, serverQuiet)
+        }
+        setUser(nextUser)
+        try { localStorage.setItem('tb_user', JSON.stringify(nextUser)) } catch {}
       })
       .catch(() => {
         localStorage.removeItem('tb_token')
@@ -31,8 +43,18 @@ export function AuthProvider({ children }) {
 
   function login(token, userData) {
     localStorage.setItem('tb_token', token)
-    localStorage.setItem('tb_user', JSON.stringify(userData))
-    setUser(userData)
+    const serverQuiet = userData.quiet_hours || DEFAULT_QUIET
+    const localQuiet = loadQuietHours(userData.id)
+    const hasLocalQuiet = localStorage.getItem(`tb_quiet_${userData.id}`)
+    const quiet_hours = hasLocalQuiet ? localQuiet : serverQuiet
+    const nextUser = { ...userData, quiet_hours }
+    if (hasLocalQuiet && (localQuiet.start !== serverQuiet.start || localQuiet.end !== serverQuiet.end)) {
+      api.updateQuietHours(localQuiet).catch(() => {})
+    } else {
+      saveQuietHours(userData.id, serverQuiet)
+    }
+    localStorage.setItem('tb_user', JSON.stringify(nextUser))
+    setUser(nextUser)
   }
 
   function updateUser(patch) {

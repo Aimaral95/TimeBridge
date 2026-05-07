@@ -40,6 +40,25 @@ function scheduleBlockKey(block, tzid) {
   ].join("|");
 }
 
+const DEFAULT_QUIET_HOURS = { start: "22:00", end: "08:00" };
+const TIME_RE = /^([01]\d|2[0-3]):([0-5]\d)$/;
+
+function normalizeQuietHours(input = {}) {
+  const start = typeof input.start === "string" ? input.start : DEFAULT_QUIET_HOURS.start;
+  const end = typeof input.end === "string" ? input.end : DEFAULT_QUIET_HOURS.end;
+  if (!TIME_RE.test(start) || !TIME_RE.test(end)) return null;
+  return { start, end };
+}
+
+async function quietHoursFor(userId) {
+  const r = await pool.query(
+    "SELECT start_time, end_time FROM quiet_hours WHERE user_id = $1",
+    [userId]
+  );
+  if (r.rows.length === 0) return { ...DEFAULT_QUIET_HOURS };
+  return { start: r.rows[0].start_time, end: r.rows[0].end_time };
+}
+
 /* ── rate limiter ──────────────────────────
    Lightweight, in-memory fixed-window rate limiter.
 
@@ -180,7 +199,21 @@ async function ensureSchema() {
     CREATE TABLE IF NOT EXISTS availability (
       id         SERIAL PRIMARY KEY,
       user_id    INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
-      start_time TIMESTAMP NOT NULL
+      start_time TIMESTAMPTZ NOT NULL
+    )
+  `);
+  await pool.query(`
+    ALTER TABLE availability
+      ALTER COLUMN start_time TYPE TIMESTAMPTZ
+      USING start_time AT TIME ZONE current_setting('TIMEZONE')
+  `);
+
+  await pool.query(`
+    CREATE TABLE IF NOT EXISTS quiet_hours (
+      user_id    INTEGER PRIMARY KEY REFERENCES users(id) ON DELETE CASCADE,
+      start_time TEXT NOT NULL DEFAULT '22:00',
+      end_time   TEXT NOT NULL DEFAULT '08:00',
+      updated_at TIMESTAMP NOT NULL DEFAULT NOW()
     )
   `);
 
@@ -349,6 +382,7 @@ app.post("/login", loginLimiter, async (req, res) => {
     }
 
     const token = jwt.sign({ userId: user.id }, SECRET, { expiresIn: "7d" });
+    const quiet_hours = await quietHoursFor(user.id);
     res.json({
       token,
       // Include city + country so the Dashboard weather hero has somewhere to
@@ -357,6 +391,7 @@ app.post("/login", loginLimiter, async (req, res) => {
       user: {
         id: user.id, name: user.name, email: user.email,
         timezone: user.timezone, city: user.city, country: user.country,
+        quiet_hours,
       },
     });
   } catch (err) {
@@ -435,12 +470,44 @@ app.post("/reset-password", async (req, res) => {
 /* ── profile ─────────────────────────────── */
 app.get("/me", authMiddleware, async (req, res) => {
   try {
-    const r = await pool.query(
+    const [r, quiet_hours] = await Promise.all([
+      pool.query(
       "SELECT id, name, email, timezone, city, country, created_at FROM users WHERE id = $1",
       [req.userId]
-    );
+      ),
+      quietHoursFor(req.userId),
+    ]);
     if (r.rows.length === 0) return res.status(404).json({ error: "User not found" });
-    res.json({ user: r.rows[0] });
+    res.json({ user: { ...r.rows[0], quiet_hours } });
+  } catch (err) {
+    console.error(err.message);
+    res.status(500).json({ error: "Server error" });
+  }
+});
+
+app.get("/quiet-hours", authMiddleware, async (req, res) => {
+  try {
+    res.json({ quiet_hours: await quietHoursFor(req.userId) });
+  } catch (err) {
+    console.error(err.message);
+    res.status(500).json({ error: "Server error" });
+  }
+});
+
+app.put("/quiet-hours", authMiddleware, async (req, res) => {
+  try {
+    const quiet = normalizeQuietHours(req.body);
+    if (!quiet) return res.status(400).json({ error: "Quiet hours must use HH:MM format" });
+    await pool.query(
+      `INSERT INTO quiet_hours (user_id, start_time, end_time, updated_at)
+       VALUES ($1, $2, $3, NOW())
+       ON CONFLICT (user_id)
+       DO UPDATE SET start_time = EXCLUDED.start_time,
+                     end_time = EXCLUDED.end_time,
+                     updated_at = NOW()`,
+      [req.userId, quiet.start, quiet.end]
+    );
+    res.json({ quiet_hours: quiet });
   } catch (err) {
     console.error(err.message);
     res.status(500).json({ error: "Server error" });
@@ -1253,13 +1320,18 @@ app.get("/connections", authMiddleware, async (req, res) => {
               u.email AS other_email,
               u.timezone AS other_timezone,
               u.city     AS other_city,
-              u.country  AS other_country
+              u.country  AS other_country,
+              json_build_object(
+                'start', COALESCE(qh.start_time, '22:00'),
+                'end',   COALESCE(qh.end_time,   '08:00')
+              ) AS other_quiet_hours
          FROM connections c
          LEFT JOIN users u
            ON u.id = CASE
                        WHEN c.user_id = $1 THEN c.connected_user_id
                        ELSE c.user_id
                      END
+         LEFT JOIN quiet_hours qh ON qh.user_id = u.id
         WHERE c.user_id = $1 OR c.connected_user_id = $1`,
       [req.userId]
     );
@@ -1311,9 +1383,12 @@ app.post("/availability", authMiddleware, async (req, res) => {
 
     await pool.query("DELETE FROM availability WHERE user_id = $1", [req.userId]);
     for (const slot of slots) {
+      const instant = new Date(slot);
+      if (Number.isNaN(instant.getTime()))
+        return res.status(400).json({ error: "Invalid slot timestamp" });
       await pool.query(
         "INSERT INTO availability (user_id, start_time) VALUES ($1, $2)",
-        [req.userId, slot]
+        [req.userId, instant.toISOString()]
       );
     }
     res.json({ message: "Availability updated", count: slots.length });

@@ -3,8 +3,9 @@ import { useNavigate, useSearchParams } from 'react-router-dom'
 import { Moon, Sun, Users, Clock, AlertTriangle, SearchX, Check, ArrowRight, Sparkles } from 'lucide-react'
 import { api } from '../api/client'
 import { useAuth } from '../context/AuthContext'
-import { loadQuietHours, inQuietHours } from '../utils/quietHours'
-import { coalesceRows, rankWindows } from '../utils/overlap'
+import { loadQuietHours } from '../utils/quietHours'
+import { buildOverlapRows, coalesceRows, rankWindows } from '../utils/overlap'
+import { datePartsInTz } from '../utils/tz'
 
 /* ─────────────────────────────────────────────────────────────────
    OverlapPage — "When can I actually call my mom?"
@@ -34,8 +35,8 @@ const PALETTE = [
   { color: '#39d0d8', bg: 'rgba(57,208,216,.2)' },
 ]
 
-function fmtTime(d) {
-  return d.toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' })
+function fmtTime(d, tz) {
+  return d.toLocaleTimeString([], { hour: 'numeric', minute: '2-digit', timeZone: tz })
 }
 
 /* Same instant rendered in another time zone — used to show
@@ -56,13 +57,15 @@ function tzShort(tz) {
   return (parts[parts.length - 1] || tz).replace(/_/g, ' ')
 }
 
-function fmtDay(s) {
+function fmtDay(s, tz) {
   const d = new Date(s)
   const t = new Date()
-  const tm = new Date(t); tm.setDate(t.getDate() + 1)
-  if (d.toDateString() === t.toDateString()) return 'Today'
-  if (d.toDateString() === tm.toDateString()) return 'Tomorrow'
-  return d.toLocaleDateString([], { weekday: 'long', month: 'short', day: 'numeric' })
+  const a = datePartsInTz(d, tz)
+  const today = datePartsInTz(t, tz)
+  const tomorrow = datePartsInTz(new Date(t.getTime() + 24 * 60 * 60 * 1000), tz)
+  if (a.year === today.year && a.month === today.month && a.day === today.day) return 'Today'
+  if (a.year === tomorrow.year && a.month === tomorrow.month && a.day === tomorrow.day) return 'Tomorrow'
+  return d.toLocaleDateString([], { weekday: 'long', month: 'short', day: 'numeric', timeZone: tz })
 }
 
 function localTime(tz) {
@@ -94,7 +97,8 @@ export default function OverlapPage() {
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState('')
   const [hideQuiet, setHideQuiet] = useState(true)
-  const quiet = useMemo(() => loadQuietHours(user?.id), [user?.id])
+  const quiet = useMemo(() => user?.quiet_hours || loadQuietHours(user?.id), [user?.id, user?.quiet_hours])
+  const userTz = user?.timezone || 'UTC'
 
   // Mark "user has visited the overlap page" so the Dashboard onboarding
   // checklist can tick this step off, regardless of how they arrived here.
@@ -142,36 +146,26 @@ export default function OverlapPage() {
     return () => { cancelled = true }
   }, [])
 
-  // Build the list of slots to show, with who's free at each.
-  // mode: showAll = "any family member free" (default), or filtered to one connection.
   const rows = useMemo(() => {
-    if (!mine.length) return []
-    const rows = []
-    for (const iso of mine) {
-      const when = new Date(iso)
-      // Hide times that fall in MY quiet hours (when toggle is on).
-      if (hideQuiet && inQuietHours(when, quiet)) continue
-      // Who else is free at this exact slot?
-      const free = []
-      for (const c of connections) {
-        if (filterWith && c.other_id !== filterWith) continue
-        if (theirs[c.other_id]?.has(iso)) free.push(c)
-      }
-      // Only show slots where at least one (filtered) family member is also free.
-      if (free.length === 0) continue
-      rows.push({ iso, when, free })
-    }
-    rows.sort((a, b) => a.when - b.when)
-    return rows
-  }, [mine, theirs, connections, filterWith, hideQuiet, quiet])
+    return buildOverlapRows({ mine, connections, theirs, filterWith, quiet, userTz, hideQuiet })
+  }, [mine, theirs, connections, filterWith, hideQuiet, quiet, userTz])
 
   // Coalesce contiguous rows with identical free-set into windows, then rank.
   const windows = useMemo(() => coalesceRows(rows), [rows])
+  const quietWindows = useMemo(() => {
+    if (!hideQuiet) return []
+    const windows = [{ ...quiet, tzid: userTz }]
+    for (const c of connections) {
+      if (filterWith && c.other_id !== filterWith) continue
+      if (c.other_quiet_hours) {
+        windows.push({ ...c.other_quiet_hours, tzid: c.other_timezone || 'UTC' })
+      }
+    }
+    return windows
+  }, [connections, filterWith, hideQuiet, quiet, userTz])
   const ranked  = useMemo(
-    // We pass MY quiet hours as the only quiet window for the ranking penalty.
-    // (When privacy/preferences across users land in v1.1, this becomes a list.)
-    () => rankWindows(windows, { now: new Date(), quietWindows: [quiet] }),
-    [windows, quiet]
+    () => rankWindows(windows, { now: new Date(), quietWindows }),
+    [windows, quietWindows]
   )
   // The single best window — rendered with a "Best" badge in the list below.
   const bestStartIso = ranked[0]?.startIso
@@ -183,12 +177,13 @@ export default function OverlapPage() {
     const rankByStart = new Map(ranked.map(w => [w.startIso, { rank: w.rank, score: w.score }]))
     const g = {}
     for (const w of windows) {
-      const k = w.when.toDateString()
+      const p = datePartsInTz(w.when, userTz)
+      const k = `${p.year}-${String(p.month).padStart(2, '0')}-${String(p.day).padStart(2, '0')}`
       if (!g[k]) g[k] = []
       g[k].push({ ...w, ...rankByStart.get(w.startIso) })
     }
     return g
-  }, [windows, ranked])
+  }, [windows, ranked, userTz])
 
   function pickFilter(otherId) {
     const next = new URLSearchParams(params)
@@ -384,13 +379,13 @@ export default function OverlapPage() {
           <div className="stack g24">
             {Object.entries(grouped).map(([dayStr, slots]) => (
               <div key={dayStr}>
-                <div className="section-label">{fmtDay(dayStr)}</div>
+                <div className="section-label">{fmtDay(slots[0]?.when || dayStr, userTz)}</div>
                 <div className="stack g8">
                   {slots.map(w => {
                     const isWindow = w.hours > 1
                     const timeLabel = isWindow
-                      ? `${fmtTime(w.when)} – ${fmtTime(w.endTime)}`
-                      : fmtTime(w.when)
+                      ? `${fmtTime(w.when, userTz)} – ${fmtTime(w.endTime, userTz)}`
+                      : fmtTime(w.when, userTz)
                     const subLabel = isWindow ? `${w.hours}-hour window` : '1 hour block'
 
                     // For each free family member, show what time the window is for them.

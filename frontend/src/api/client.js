@@ -26,6 +26,8 @@ export const api = {
   getMe:     ()  => request('GET',  '/me'),
   updateMe:  (b) => request('PUT',  '/me', b),
   deleteMe:  ()  => request('DELETE','/me'),
+  getQuietHours: () => request('GET', '/quiet-hours'),
+  updateQuietHours: (quiet) => request('PUT', '/quiet-hours', quiet),
 
   // Password reset
   forgotPassword: (email) => request('POST', '/forgot-password', { email }),

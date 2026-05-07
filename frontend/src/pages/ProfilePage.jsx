@@ -84,7 +84,9 @@ export default function ProfilePage() {
         city: d.user.city || '',
         country: d.user.country || '',
       })
-      setQuiet(loadQuietHours(d.user.id))
+      const quietHours = d.user.quiet_hours || loadQuietHours(d.user.id)
+      setQuiet(quietHours)
+      saveQuietHours(d.user.id, quietHours)
     }).catch(e => toast('Error', e.message))
   }, [])
 
@@ -93,7 +95,12 @@ export default function ProfilePage() {
       const v = e.target.value
       setQuiet(q => {
         const next = { ...q, [k]: v }
-        if (profile?.id) saveQuietHours(profile.id, next)
+        if (profile?.id) {
+          saveQuietHours(profile.id, next)
+          api.updateQuietHours(next)
+            .then(d => updateUser({ quiet_hours: d.quiet_hours }))
+            .catch(() => {})
+        }
         return next
       })
     }

@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest'
-import { wallClockInTz, browserTz } from '../tz.js'
+import { wallClockInTz, browserTz, zonedTimeToUtc } from '../tz.js'
 
 /* All tests use UTC instants chosen so the answer is unambiguous regardless
    of the test runner's local clock. The point of these tests is to verify
@@ -64,5 +64,17 @@ describe('browserTz', () => {
     const tz = browserTz()
     expect(typeof tz).toBe('string')
     expect(tz.length > 0).toBe(true)
+  })
+})
+
+describe('zonedTimeToUtc', () => {
+  it('anchors Houston 9 AM to Houston time, not the browser timezone', () => {
+    expect(zonedTimeToUtc(2026, 5, 4, 9, 0, 'America/Chicago').toISOString())
+      .toBe('2026-05-04T14:00:00.000Z')
+  })
+
+  it('anchors Mongolia 9 AM to Mongolia time, not the browser timezone', () => {
+    expect(zonedTimeToUtc(2026, 5, 4, 9, 0, 'Asia/Ulaanbaatar').toISOString())
+      .toBe('2026-05-04T01:00:00.000Z')
   })
 })

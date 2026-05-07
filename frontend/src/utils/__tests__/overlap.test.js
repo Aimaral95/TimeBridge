@@ -1,6 +1,6 @@
 import { describe, it, expect } from 'vitest'
 import {
-  coalesceRows, sameFreeSet, scoreWindow, rankWindows, HOUR_MS,
+  buildOverlapRows, coalesceRows, connectionAvailableAt, sameFreeSet, scoreWindow, rankWindows, HOUR_MS,
 } from '../overlap.js'
 
 const base = new Date('2026-04-30T09:00:00Z')
@@ -29,6 +29,38 @@ describe('sameFreeSet', () => {
   it('handles empty sets', () => {
     expect(sameFreeSet([], [])).toBe(true)
     expect(sameFreeSet([], [mom])).toBe(false)
+  })
+})
+
+describe('availability filtering', () => {
+  it('filters a connection slot that falls inside that connection quiet hours', () => {
+    const iso = '2026-05-08T01:00:00.000Z' // 08:00 in Asia/Hovd
+    const jane = {
+      other_id: 6,
+      other_name: 'Jane',
+      other_timezone: 'Asia/Hovd',
+      other_quiet_hours: { start: '08:00', end: '09:00' },
+    }
+    expect(connectionAvailableAt(iso, new Set([iso]), jane)).toBe(false)
+  })
+
+  it('buildOverlapRows uses the same quiet-hour filter for both pages', () => {
+    const visible = '2026-05-08T01:00:00.000Z' // 20:00 previous day in Chicago, 08:00 in Hovd
+    const hidden = '2026-05-08T02:00:00.000Z'  // 09:00 in Hovd, quiet for Aimaral below
+    const jane = {
+      other_id: 6,
+      other_name: 'Jane',
+      other_timezone: 'Asia/Hovd',
+      other_quiet_hours: { start: '22:00', end: '08:00' },
+    }
+    const out = buildOverlapRows({
+      mine: [visible, hidden],
+      connections: [jane],
+      theirs: { 6: new Set([visible, hidden]) },
+      quiet: { start: '21:00', end: '10:00' },
+      userTz: 'America/Chicago',
+    })
+    expect(out.map(r => r.iso)).toEqual([visible])
   })
 })
 
@@ -145,6 +177,18 @@ describe('scoreWindow', () => {
       quietWindows: [{ start: '22:00', end: '08:00' }],
     })
     // 0.6 * clean = penalty (allow a tiny rounding tolerance)
+    expect(Math.abs(penalty - clean * 0.6) < 0.01).toBe(true)
+  })
+
+  it('quiet-hours penalty can evaluate in an explicit timezone', () => {
+    const w = win(0, 1, [mom])
+    w.when = new Date('2026-05-04T01:00:00.000Z') // 09:00 in Ulaanbaatar
+    w.endTime = new Date(w.when.getTime() + HOUR_MS)
+    const clean = scoreWindow(w, { now: REF_NOW, quietWindows: [] })
+    const penalty = scoreWindow(w, {
+      now: REF_NOW,
+      quietWindows: [{ start: '09:00', end: '10:00', tzid: 'Asia/Ulaanbaatar' }],
+    })
     expect(Math.abs(penalty - clean * 0.6) < 0.01).toBe(true)
   })
 

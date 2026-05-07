@@ -3,28 +3,32 @@ import { ChevronLeft, ChevronRight, RotateCcw } from 'lucide-react'
 import { api } from '../api/client'
 import { useToast } from '../context/ToastContext'
 import { useSchedule } from '../context/ScheduleContext'
+import { useAuth } from '../context/AuthContext'
 import { Tooltip } from '../components/Tooltip'
+import { loadQuietHours } from '../utils/quietHours'
+import { connectionAvailableAt } from '../utils/overlap'
+import { datePartsInTz, wallClockInTz, weekStartDatesInTz, zonedTimeToUtc } from '../utils/tz'
 
 const HOURS = Array.from({ length: 24 }, (_, i) => i)            // 12am – 11pm
-const DAYS  = ['Sun','Mon','Tue','Wed','Thu','Fri','Sat']
 
-function getWeekDates(offset = 0) {
-  const now = new Date()
-  const start = new Date(now)
-  start.setDate(now.getDate() - now.getDay() + offset * 7)
-  start.setHours(0,0,0,0)
-  return Array.from({ length: 7 }, (_, i) => { const d = new Date(start); d.setDate(start.getDate()+i); return d })
+function getWeekDates(offset = 0, tzid) {
+  return weekStartDatesInTz(offset, tzid)
 }
 
-function slotKey(date, hour) {
-  const d = new Date(date); d.setHours(hour, 0, 0, 0); return d.toISOString()
+function slotKey(date, hour, tzid) {
+  const p = datePartsInTz(date, tzid)
+  return zonedTimeToUtc(p.year, p.month, p.day, hour, 0, tzid).toISOString()
 }
 function fmtHour(h) {
   if (h === 0) return '12 AM'
   if (h === 12) return '12 PM'
   return h > 12 ? `${h - 12} PM` : `${h} AM`
 }
-function isToday(d) { return d.toDateString() === new Date().toDateString() }
+function isToday(d, tzid) {
+  const a = datePartsInTz(d, tzid)
+  const b = datePartsInTz(new Date(), tzid)
+  return a.year === b.year && a.month === b.month && a.day === b.day
+}
 
 /* HH:MM → minutes since midnight */
 function toMin(hhmm) {
@@ -34,23 +38,37 @@ function toMin(hhmm) {
 }
 
 /* Does any schedule block cover (date, hour)?  */
-function inScheduleBlock(date, hour, blocks) {
+function inScheduleBlock(date, hour, blocks, userTz) {
   if (!blocks?.length) return false
-  const dayKey = DAYS[date.getDay()]
-  const mins = hour * 60
-  return blocks.some(b =>
-    Array.isArray(b.days) &&
-    b.days.includes(dayKey) &&
-    toMin(b.start_time) <= mins &&
-    mins < toMin(b.end_time)
-  )
+  const p = datePartsInTz(date, userTz)
+  const instant = zonedTimeToUtc(p.year, p.month, p.day, hour, 0, userTz)
+  return blocks.some(b => {
+    if (!Array.isArray(b.days)) return false
+    const { dayKey, minutes } = wallClockInTz(instant, b.tzid || userTz)
+    return b.days.includes(dayKey) &&
+      toMin(b.start_time) <= minutes &&
+      minutes < toMin(b.end_time)
+  })
+}
+
+function inQuietHoursInTz(iso, qh, tzid) {
+  if (!qh) return false
+  const { minutes } = wallClockInTz(iso, tzid)
+  const s = toMin(qh.start)
+  const e = toMin(qh.end)
+  if (s === e) return false
+  if (s < e) return minutes >= s && minutes < e
+  return minutes >= s || minutes < e
 }
 
 export default function AvailabilityPage() {
   const toast = useToast()
-  const { blocks } = useSchedule()
+  const { user } = useAuth()
+  const { blocks, loading: scheduleLoading } = useSchedule()
+  const userTz = user?.timezone || 'UTC'
   const [offset, setOffset] = useState(0)
   const [selected, setSelected] = useState(new Set())     // my free slots
+  const selectedRef = useRef(selected)
   const [saving, setSaving] = useState(false)
   const [loadingMine, setLoadingMine] = useState(true)
   const [seeded, setSeeded] = useState(false)             // have we auto-seeded yet?
@@ -63,18 +81,55 @@ export default function AvailabilityPage() {
 
   const dragging = useRef(false)
   const dragMode = useRef(null)
+  const autoDerivedKey = useRef('')
 
-  const weekDates = getWeekDates(offset)
+  function replaceSelected(next) {
+    selectedRef.current = next
+    setSelected(next)
+  }
+
+  function updateSelected(fn) {
+    replaceSelected(fn(selectedRef.current))
+  }
+
+  function buildScheduleSelection(base = selectedRef.current) {
+    const visible = new Set(weekDates.flatMap(d => HOURS.map(h => slotKey(d, h, userTz))))
+    const next = new Set([...base].filter(k => !visible.has(k)))
+    weekDates.forEach(d => HOURS.forEach(h => {
+      const k = slotKey(d, h, userTz)
+      if (!scheduleBusy.has(k) && !quietBusy.has(k)) next.add(k)
+    }))
+    return next
+  }
+
+  function sameSet(a, b) {
+    if (a.size !== b.size) return false
+    for (const x of a) if (!b.has(x)) return false
+    return true
+  }
+
+  const weekDates = useMemo(() => getWeekDates(offset, userTz), [offset, userTz])
+  const quiet = useMemo(() => user?.quiet_hours || loadQuietHours(user?.id), [user?.id, user?.quiet_hours])
+
+  const quietBusy = useMemo(() => {
+    const s = new Set()
+    weekDates.forEach(d => HOURS.forEach(h => {
+      const key = slotKey(d, h, userTz)
+      if (inQuietHoursInTz(key, quiet, userTz)) s.add(key)
+    }))
+    return s
+  }, [quiet, userTz, weekDates])
 
   // Map of {slotKey -> true} for everything in the visible week that the
   // user's schedule says is busy. Re-computed when blocks/week change.
   const scheduleBusy = useMemo(() => {
     const s = new Set()
     weekDates.forEach(d => HOURS.forEach(h => {
-      if (inScheduleBlock(d, h, blocks)) s.add(slotKey(d, h))
+      const key = slotKey(d, h, userTz)
+      if (inScheduleBlock(d, h, blocks, userTz)) s.add(key)
     }))
     return s
-  }, [blocks, offset]) // weekDates depends on offset
+  }, [blocks, userTz, weekDates])
 
   // Load my saved availability + my connections on mount.
   useEffect(() => {
@@ -88,7 +143,7 @@ export default function AvailabilityPage() {
         if (cancelled) return
         const savedSlots = mine.slots || []
         if (savedSlots.length > 0) {
-          setSelected(new Set(savedSlots))
+          replaceSelected(new Set(savedSlots))
           setSeeded(true) // user has made choices before, don't override
         }
         const accepted = (conns.connections || []).filter(c => c.status === 'accepted')
@@ -107,25 +162,51 @@ export default function AvailabilityPage() {
     if (loadingMine || seeded) return
     const seed = new Set()
     weekDates.forEach(d => HOURS.forEach(h => {
-      const k = slotKey(d, h)
-      if (!scheduleBusy.has(k)) seed.add(k)
+      const k = slotKey(d, h, userTz)
+      if (!scheduleBusy.has(k) && !quietBusy.has(k)) seed.add(k)
     }))
-    setSelected(seed)
+    replaceSelected(seed)
     setSeeded(true)
-  }, [loadingMine, seeded, scheduleBusy])
+  }, [loadingMine, quietBusy, scheduleBusy, seeded, userTz, weekDates])
 
   // Whenever the schedule changes after seeding, prune any slot that's now
-  // covered by a schedule block from `selected`. The user can still click
-  // to manually mark "I'm actually free during this block" if they want.
+  // covered by a schedule block or quiet hours from `selected`.
   useEffect(() => {
     if (!seeded) return
-    setSelected(prev => {
+    updateSelected(prev => {
       let changed = false
       const next = new Set(prev)
       scheduleBusy.forEach(k => { if (next.has(k)) { next.delete(k); changed = true } })
+      quietBusy.forEach(k => { if (next.has(k)) { next.delete(k); changed = true } })
       return changed ? next : prev
     })
-  }, [scheduleBusy, seeded])
+  }, [quietBusy, scheduleBusy, seeded])
+
+  // Keep the visible week schedule-derived on page load/refresh. Older saved
+  // availability was created with browser-local timezone logic, so simply
+  // loading those rows can make the page snap back to stale green cells.
+  useEffect(() => {
+    if (loadingMine || scheduleLoading || !seeded) return
+    const key = [
+      user?.id || 'anon',
+      userTz,
+      offset,
+      blocks.map(b => `${b.id}:${b.days?.join(',')}:${b.start_time}-${b.end_time}:${b.tzid || userTz}`).join('|'),
+      quiet.start,
+      quiet.end,
+    ].join('::')
+    if (autoDerivedKey.current === key) return
+    autoDerivedKey.current = key
+
+    const next = buildScheduleSelection(selectedRef.current)
+    if (sameSet(next, selectedRef.current)) return
+
+    replaceSelected(next)
+    const cleanSlots = Array.from(next).filter(k => !quietBusy.has(k))
+    api.saveAvailability(cleanSlots)
+      .then(() => replaceSelected(new Set(cleanSlots)))
+      .catch(e => toast('Could not auto-save availability', e.message))
+  }, [blocks, loadingMine, offset, quiet, quietBusy, scheduleLoading, seeded, user?.id, userTz])
 
   // Load the selected connection's slots whenever the chip changes.
   useEffect(() => {
@@ -141,67 +222,84 @@ export default function AvailabilityPage() {
 
   /* ── slot interactions: click & drag toggles selected ──────── */
   function startDrag(key) {
+    if (quietBusy.has(key)) return
     dragging.current = true
-    dragMode.current = selected.has(key) ? 'remove' : 'add'
-    setSelected(p => { const n = new Set(p); dragMode.current==='remove'?n.delete(key):n.add(key); return n })
+    dragMode.current = selectedRef.current.has(key) ? 'remove' : 'add'
+    updateSelected(p => { const n = new Set(p); dragMode.current==='remove'?n.delete(key):n.add(key); return n })
   }
   function dragOver(key) {
     if (!dragging.current) return
-    setSelected(p => { const n = new Set(p); dragMode.current==='remove'?n.delete(key):n.add(key); return n })
+    if (quietBusy.has(key)) return
+    updateSelected(p => { const n = new Set(p); dragMode.current==='remove'?n.delete(key):n.add(key); return n })
   }
   function stopDrag() { dragging.current = false }
 
   function toggleDay(date) {
-    const keys = HOURS.map(h => slotKey(date, h))
-    const all = keys.every(k => selected.has(k))
-    setSelected(p => { const n = new Set(p); all ? keys.forEach(k=>n.delete(k)) : keys.forEach(k=>n.add(k)); return n })
+    const keys = HOURS.map(h => slotKey(date, h, userTz))
+    const all = keys.every(k => selectedRef.current.has(k))
+    updateSelected(p => {
+      const n = new Set(p)
+      all ? keys.forEach(k=>n.delete(k)) : keys.forEach(k=>{ if (!quietBusy.has(k)) n.add(k) })
+      return n
+    })
   }
   function toggleHour(hour) {
-    const keys = weekDates.map(d => slotKey(d, hour))
-    const all = keys.every(k => selected.has(k))
-    setSelected(p => { const n = new Set(p); all ? keys.forEach(k=>n.delete(k)) : keys.forEach(k=>n.add(k)); return n })
+    const keys = weekDates.map(d => slotKey(d, hour, userTz))
+    const all = keys.every(k => selectedRef.current.has(k))
+    updateSelected(p => {
+      const n = new Set(p)
+      all ? keys.forEach(k=>n.delete(k)) : keys.forEach(k=>{ if (!quietBusy.has(k)) n.add(k) })
+      return n
+    })
   }
   function clearWeek() {
-    const keys = weekDates.flatMap(d => HOURS.map(h => slotKey(d, h)))
-    setSelected(p => { const n = new Set(p); keys.forEach(k=>n.delete(k)); return n })
+    const keys = weekDates.flatMap(d => HOURS.map(h => slotKey(d, h, userTz)))
+    updateSelected(p => { const n = new Set(p); keys.forEach(k=>n.delete(k)); return n })
   }
-  function resetToSchedule() {
-    // Re-seed from current schedule for the visible week.
-    setSelected(p => {
-      const keep = new Set([...p].filter(k => {
-        // Keep slots that aren't in this week (other weeks unchanged).
-        return !weekDates.some(d => HOURS.some(h => slotKey(d, h) === k))
-      }))
-      weekDates.forEach(d => HOURS.forEach(h => {
-        const k = slotKey(d, h)
-        if (!scheduleBusy.has(k)) keep.add(k)
-      }))
-      return keep
-    })
-    toast('Reset to schedule', 'Free hours auto-filled around your blocks')
+  async function resetToSchedule() {
+    const next = buildScheduleSelection()
+    replaceSelected(next)
+    setSaving(true)
+    try {
+      const cleanSlots = Array.from(next).filter(k => !quietBusy.has(k))
+      await api.saveAvailability(cleanSlots)
+      replaceSelected(new Set(cleanSlots))
+      toast('Reset and saved', `${cleanSlots.length} free slot(s) saved from your schedule`)
+    } catch (e) {
+      toast('Reset locally', `Could not save yet: ${e.message}`)
+    } finally {
+      setSaving(false)
+    }
   }
 
   async function save() {
     setSaving(true)
     try {
-      await api.saveAvailability(Array.from(selected))
-      toast('Saved', `${selected.size} free slot(s) saved`)
+      const cleanSlots = Array.from(selectedRef.current).filter(k => !quietBusy.has(k))
+      await api.saveAvailability(cleanSlots)
+      replaceSelected(new Set(cleanSlots))
+      toast('Saved', `${cleanSlots.length} free slot(s) saved`)
     } catch (e) { toast('Error', e.message) }
     finally { setSaving(false) }
   }
 
   const weekCount = useMemo(
-    () => weekDates.flatMap(d => HOURS.map(h => slotKey(d,h))).filter(k => selected.has(k)).length,
-    [weekDates, selected]
+    () => weekDates.flatMap(d => HOURS.map(h => slotKey(d, h, userTz))).filter(k => selected.has(k)).length,
+    [weekDates, selected, userTz]
   )
 
   const activeConn = connections.find(c => c.other_id === activeConnId)
+  function connectionFreeAt(iso) {
+    if (!activeConnId) return false
+    return connectionAvailableAt(iso, theirSlots, activeConn, { hideQuiet: true })
+  }
+
   const overlapCount = useMemo(() => {
     if (!activeConnId) return 0
     let n = 0
-    selected.forEach(k => { if (theirSlots.has(k)) n++ })
+    selected.forEach(k => { if (connectionFreeAt(k)) n++ })
     return n
-  }, [activeConnId, selected, theirSlots])
+  }, [activeConn, activeConnId, selected, theirSlots])
 
   return (
     <div style={{ maxWidth:960, margin:'0 auto' }} className="page-wrap fade-up availability-page">
@@ -264,8 +362,8 @@ export default function AvailabilityPage() {
             </button>
           </Tooltip>
           <span className="text-sm fw5">
-            {weekDates[0].toLocaleDateString([],{month:'short',day:'numeric'})} –{' '}
-            {weekDates[6].toLocaleDateString([],{month:'short',day:'numeric',year:'numeric'})}
+            {weekDates[0].toLocaleDateString([], { month:'short', day:'numeric', timeZone: userTz })} –{' '}
+            {weekDates[6].toLocaleDateString([], { month:'short', day:'numeric', year:'numeric', timeZone: userTz })}
           </span>
           <Tooltip label="Next week" side="top">
             <button className="btn btn-ghost btn-sm" onClick={() => setOffset(o=>o+1)} aria-label="Next week">
@@ -276,9 +374,9 @@ export default function AvailabilityPage() {
         </div>
         <div className="row g8 wrap">
           <span className="text-xs text-2">{weekCount} free this week · {selected.size} total</span>
-          <button className="btn btn-ghost btn-sm" style={{ fontSize:11 }} onClick={resetToSchedule}>
+          <button className="btn btn-ghost btn-sm" style={{ fontSize:11 }} onClick={resetToSchedule} disabled={saving}>
             <RotateCcw size={12} strokeWidth={2} aria-hidden="true" />
-            Reset to schedule
+            Reset and save
           </button>
           <button className="btn btn-ghost btn-sm" style={{ fontSize:11 }} onClick={clearWeek}>Clear week</button>
           <button className="btn btn-primary btn-sm" disabled={saving} onClick={save}>
@@ -329,9 +427,11 @@ export default function AvailabilityPage() {
           {weekDates.map((date, i) => (
             <div key={i} className="cal-head" onClick={() => toggleDay(date)}>
               <div className="text-xs text-2" style={{ textTransform:'uppercase', letterSpacing:'.05em', marginBottom:3 }}>
-                {DAYS[date.getDay()]}
+                {wallClockInTz(date, userTz).dayKey}
               </div>
-              <div className={`cal-day-num ${isToday(date)?'cal-today':''}`}>{date.getDate()}</div>
+              <div className={`cal-day-num ${isToday(date, userTz)?'cal-today':''}`}>
+                {datePartsInTz(date, userTz).day}
+              </div>
             </div>
           ))}
 
@@ -342,10 +442,11 @@ export default function AvailabilityPage() {
                 {fmtHour(hour)}
               </div>
               {weekDates.map((date, di) => {
-                const key = slotKey(date, hour)
+                const key = slotKey(date, hour, userTz)
                 const mine     = selected.has(key)
-                const sched    = scheduleBusy.has(key)
-                const theirs   = activeConnId && theirSlots.has(key)
+                const quietSlot = quietBusy.has(key)
+                const sched    = scheduleBusy.has(key) || quietSlot
+                const theirs   = connectionFreeAt(key)
                 const both     = mine && theirs
 
                 // Slot styling layers — `both` wins, then `theirs`, then mine, then schedule-busy.
@@ -361,7 +462,7 @@ export default function AvailabilityPage() {
                   <div
                     key={`${hour}-${di}`}
                     className={cls}
-                    title={sched && !mine ? 'Busy from schedule (click to override)' : undefined}
+                    title={quietSlot ? 'Quiet hours' : (sched && !mine ? 'Busy from schedule (click to override)' : undefined)}
                     onMouseDown={() => startDrag(key)}
                     onMouseEnter={() => dragOver(key)}
                   />
@@ -374,7 +475,7 @@ export default function AvailabilityPage() {
 
       <p className="text-xs text-2 mt12 calendar-help">
         Click a day name or hour to toggle the whole row/column · drag across cells to select multiple ·
-        red cells = busy from your schedule (click to free yourself)
+        red cells = busy from your schedule or quiet hours
       </p>
 
       {loadingMine && (
