@@ -260,11 +260,11 @@ export default function FamilyPage() {
             </button>
           )}
         </div>
-        <div className="card mb20">
+        <div className="card mb20 pending-invites-card">
           {pendingMine.map(p => (
-            <div key={p.id} className="row g12" style={{ padding:'12px 0', borderBottom:'1px solid var(--border)' }}>
+            <div key={p.id} className="row g12 pending-invite-row" style={{ padding:'12px 0', borderBottom:'1px solid var(--border)' }}>
               <div className="avatar av-36" style={{ background:'rgba(210,153,34,.2)', color:'#e3b341' }}>?</div>
-              <div className="flex-1">
+              <div className="flex-1 pending-invite-info">
                 <div style={{ fontWeight:500, fontSize:14 }}>Waiting for someone to join</div>
                 <div className="text-xs text-2" style={{ fontFamily:'monospace', letterSpacing:'.1em' }}>
                   Code: {p.invite_code}

@@ -732,4 +732,45 @@ svg.chevron { display: inline-block; }
   .stack.g10 > .card.card-sm > .flex-1 > .row.g8.wrap {
     word-break: break-word;
   }
+
+  /* Pending invite cards need their own mobile layout: avatar + copy first,
+     then actions below instead of squeezing three buttons beside the text. */
+  .pending-invites-card {
+    padding: 12px;
+  }
+
+  .pending-invite-row {
+    flex-wrap: wrap;
+    align-items: flex-start;
+    row-gap: 12px;
+  }
+
+  .pending-invite-row > .avatar {
+    flex: 0 0 auto;
+    margin-top: 2px;
+  }
+
+  .pending-invite-info {
+    flex: 1 1 calc(100% - 52px);
+    min-width: 0;
+  }
+
+  .pending-invite-info > div:first-child {
+    line-height: 1.25;
+  }
+
+  .pending-invite-info .text-xs {
+    margin-top: 4px;
+    word-break: break-word;
+  }
+
+  .pending-invite-row > .btn {
+    flex: 1 1 0;
+    justify-content: center;
+    min-width: 0;
+  }
+
+  .pending-invite-row > .btn svg {
+    flex: 0 0 auto;
+  }
 }
