@@ -87,8 +87,10 @@ export default function SchedulePage() {
       }
       // Cycle palette colors so imported blocks don't all look the same.
       let i = 0
+      let imported = 0
+      let skipped = 0
       for (const b of parsed) {
-        await addBlock({
+        const result = await addBlock({
           title: b.title,
           type: 'imported',
           color: COLOR_PALETTE[i % COLOR_PALETTE.length],
@@ -96,9 +98,14 @@ export default function SchedulePage() {
           start_time: b.start_time,
           end_time: b.end_time,
         })
+        if (result?.skipped) skipped += 1
+        else imported += 1
         i++
       }
-      toast(`Imported ${parsed.length} event${parsed.length !== 1 ? 's' : ''}`, 'Added as recurring weekly blocks')
+      toast(
+        `Imported ${imported} event${imported === 1 ? '' : 's'}`,
+        skipped ? `Skipped ${skipped} duplicate${skipped === 1 ? '' : 's'}` : 'Added as recurring weekly blocks'
+      )
     } catch (err) {
       toast('Import failed', err.message)
     } finally {

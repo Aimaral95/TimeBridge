@@ -25,6 +25,21 @@ function generateCode() {
   return code;
 }
 
+const DAY_ORDER = ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"];
+function scheduleBlockKey(block, tzid) {
+  const title = String(block?.title || "").trim().toLowerCase();
+  const days = Array.isArray(block?.days)
+    ? [...new Set(block.days)].sort((a, b) => DAY_ORDER.indexOf(a) - DAY_ORDER.indexOf(b)).join(",")
+    : "";
+  return [
+    title,
+    days,
+    block?.start_time || "",
+    block?.end_time || "",
+    tzid || block?.tzid || "",
+  ].join("|");
+}
+
 /* ── rate limiter ──────────────────────────
    Lightweight, in-memory fixed-window rate limiter.
 
@@ -879,6 +894,17 @@ app.post("/integrations/google/import", authMiddleware, async (req, res) => {
     // Get the user's tzid for anchoring blocks.
     const u = await pool.query("SELECT timezone FROM users WHERE id = $1", [req.userId]);
     const userTz = u.rows[0]?.timezone || "UTC";
+    const existingRows = await pool.query(
+      `SELECT title, days, tzid,
+              to_char(start_time,'HH24:MI') AS start_time,
+              to_char(end_time,'HH24:MI')   AS end_time
+         FROM schedule_blocks
+        WHERE user_id = $1`,
+      [req.userId]
+    );
+    const existingKeys = new Set(
+      existingRows.rows.map(row => scheduleBlockKey(row, row.tzid || userTz))
+    );
 
     // Group events by (title, start_HHmm, end_HHmm); each unique key becomes
     // ONE recurring block whose `days` is the union of weekdays seen.
@@ -901,15 +927,29 @@ app.post("/integrations/google/import", authMiddleware, async (req, res) => {
     }
 
     let imported = 0;
+    let skipped_duplicates = 0;
     for (const v of grouped.values()) {
+      const days = Array.from(v.daySet);
+      const key = scheduleBlockKey({
+        title: v.title,
+        days,
+        start_time: v.start_time,
+        end_time: v.end_time,
+      }, userTz);
+      if (existingKeys.has(key)) {
+        skipped_duplicates += 1;
+        continue;
+      }
+
       await pool.query(
         `INSERT INTO schedule_blocks (user_id, title, type, color, days, start_time, end_time, tzid)
          VALUES ($1, $2, 'imported', '#58a6ff', $3, $4, $5, $6)`,
-        [req.userId, v.title, Array.from(v.daySet), v.start_time, v.end_time, userTz]
+        [req.userId, v.title, days, v.start_time, v.end_time, userTz]
       );
+      existingKeys.add(key);
       imported += 1;
     }
-    res.json({ imported, total_events: (data.items || []).length });
+    res.json({ imported, skipped_duplicates, total_events: (data.items || []).length });
   } catch (err) {
     console.error(err.message);
     res.status(500).json({ error: err.message });

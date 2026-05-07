@@ -18,6 +18,7 @@ import { wallClockInTz, browserTz } from '../utils/tz'
 
 const Ctx = createContext(null)
 const STORAGE_PREFIX = 'tb_schedule_'
+const DAY_ORDER = ['Mon','Tue','Wed','Thu','Fri','Sat','Sun']
 
 // Cache is now PER-USER so two accounts on the same browser don't share blocks.
 function cacheKey(userId) {
@@ -38,6 +39,20 @@ function saveCache(userId, blocks) {
   const k = cacheKey(userId)
   if (!k) return
   try { localStorage.setItem(k, JSON.stringify(blocks)) } catch {}
+}
+
+function blockKey(block, tzid) {
+  const title = (block?.title || '').trim().toLowerCase()
+  const days = Array.isArray(block?.days)
+    ? [...new Set(block.days)].sort((a, b) => DAY_ORDER.indexOf(a) - DAY_ORDER.indexOf(b)).join(',')
+    : ''
+  return [
+    title,
+    days,
+    block?.start_time || '',
+    block?.end_time || '',
+    tzid || block?.tzid || '',
+  ].join('|')
 }
 
 /* "HH:MM" -> minutes since midnight */
@@ -131,6 +146,11 @@ export function ScheduleProvider({ children }) {
     // tzid (or the browser's tzid as a fallback) so the time anchor follows
     // them around — see utils/tz.js + activeBlock() for why this matters.
     const tzid = block.tzid || user?.timezone || browserTz()
+    const nextKey = blockKey(block, tzid)
+    if (blocks.some(existing => blockKey(existing, existing.tzid || tzid) === nextKey)) {
+      return { skipped: true, reason: 'duplicate' }
+    }
+
     const optimistic = { ...block, tzid, id: `tmp-${Date.now()}` }
     setBlocks(b => { const n = [...b, optimistic]; saveCache(user?.id, n); return n })
     try {
@@ -147,9 +167,11 @@ export function ScheduleProvider({ children }) {
         const n = b.map(x => x === optimistic ? data.block : x)
         saveCache(user?.id, n); return n
       })
+      return { skipped: false, block: data.block }
     } catch (e) {
       // Backend not available — keep optimistic copy.
       console.warn('addScheduleBlock fell back to local-only:', e.message)
+      return { skipped: false, block: optimistic, offline: true }
     }
   }
 

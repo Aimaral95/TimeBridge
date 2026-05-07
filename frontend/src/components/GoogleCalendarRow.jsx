@@ -62,7 +62,9 @@ export default function GoogleCalendarRow() {
     try {
       const r = await api.googleImport()
       toast(`Imported ${r.imported} event${r.imported === 1 ? '' : 's'}`,
-            `Reviewed ${r.total_events || 0} upcoming events from Google.`)
+            r.skipped_duplicates
+              ? `Skipped ${r.skipped_duplicates} duplicate${r.skipped_duplicates === 1 ? '' : 's'} from ${r.total_events || 0} upcoming events.`
+              : `Reviewed ${r.total_events || 0} upcoming events from Google.`)
     } catch (e) { toast('Import failed', e.message) }
     finally { setImporting(false) }
   }
