@@ -9,7 +9,7 @@ import { detectLocation } from '../utils/geoLocate'
 import { loadQuietHours, saveQuietHours, DEFAULT_QUIET } from '../utils/quietHours'
 
 export default function ProfilePage() {
-  const { user, updateUser, logout } = useAuth()
+  const { updateUser, logout } = useAuth()
   const toast = useToast()
   const navigate = useNavigate()
 
@@ -21,17 +21,37 @@ export default function ProfilePage() {
   const [detecting, setDetecting] = useState(false)
   const [quiet, setQuiet] = useState(DEFAULT_QUIET)
 
+  async function saveProfile(nextForm, successTitle = 'Profile updated') {
+    const d = await api.updateMe({
+      name: nextForm.name,
+      timezone: nextForm.timezone,
+      city: nextForm.city,
+      country: nextForm.country,
+    })
+    setProfile(d.user)
+    setForm({
+      name: d.user.name,
+      timezone: d.user.timezone || detectTz(),
+      city: d.user.city || '',
+      country: d.user.country || '',
+    })
+    updateUser(d.user)
+    toast(successTitle, 'Changes saved successfully')
+    return d.user
+  }
+
   async function detectMyLocation() {
     setDetecting(true)
     try {
       const loc = await detectLocation()
-      setForm(f => ({
-        ...f,
-        city: loc.city || f.city,
-        country: loc.country || f.country,
-        timezone: loc.timezone || f.timezone,
-      }))
-      toast('Detected', `${loc.city || 'Unknown'}, ${loc.country || ''} (${loc.timezone})`)
+      const nextForm = {
+        ...form,
+        city: loc.city || form.city,
+        country: loc.country || form.country,
+        timezone: loc.timezone || form.timezone,
+      }
+      setForm(nextForm)
+      await saveProfile(nextForm, 'Location updated')
     } catch (e) {
       toast('Could not detect', e.message)
     } finally {
@@ -45,8 +65,8 @@ export default function ProfilePage() {
       setForm({
         name: d.user.name,
         timezone: d.user.timezone || detectTz(),
-        city: user?.city || '',
-        country: user?.country || '',
+        city: d.user.city || '',
+        country: d.user.country || '',
       })
       setQuiet(loadQuietHours(d.user.id))
     }).catch(e => toast('Error', e.message))
@@ -66,16 +86,7 @@ export default function ProfilePage() {
   async function save(e) {
     e.preventDefault(); setSaving(true)
     try {
-      // Send city + country to the backend so they persist across re-login —
-      // previously they only lived in client-side state, which is why weather
-      // disappeared after signing out.
-      const d = await api.updateMe({
-        name: form.name, timezone: form.timezone,
-        city: form.city, country: form.country,
-      })
-      setProfile(d.user)
-      updateUser({ ...d.user, city: form.city, country: form.country })
-      toast('Profile updated', 'Changes saved successfully')
+      await saveProfile(form)
     } catch (e) { toast('Error', e.message) }
     finally { setSaving(false) }
   }

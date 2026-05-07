@@ -682,3 +682,54 @@ svg.chevron { display: inline-block; }
   .nav-btn { width: 40px; height: 40px; font-size: 18px; }
   .avail-grid { grid-template-columns: repeat(3, 1fr); }
 }
+
+/* ─────────────────────────────────────────────────────────────
+   Family-page member card responsive fix.
+   Default desktop layout puts avatar / info / buttons all on one row.
+   On narrow viewports (< 640px) the buttons collide with the email
+   text — stack them below the info area instead.
+   ───────────────────────────────────────────────────────────── */
+@media (max-width: 640px) {
+  /* Allow the row to wrap so buttons drop to a new line */
+  .stack.g10 > .card.card-sm[style*="display:flex"],
+  .stack.g10 > .card.card-sm {
+    flex-wrap: wrap !important;
+    row-gap: 10px;
+    align-items: flex-start !important;
+  }
+
+  /* Keep the person/avatar icon anchored at the top-left. */
+  .stack.g10 > .card.card-sm > .avatar.av-44 {
+    order: 1;
+    flex: 0 0 auto;
+  }
+
+  /* The flex-1 info block takes full remaining width on its row */
+  .stack.g10 > .card.card-sm > .flex-1 {
+    order: 2;
+    flex: 1 1 calc(100% - 60px);   /* leave room for the avatar */
+    min-width: 0;
+  }
+
+  /* Buttons drop to their own row, full width, side-by-side */
+  .stack.g10 > .card.card-sm > .btn {
+    order: 4;
+    flex: 1 1 auto;
+    margin-left: 0;
+  }
+
+  /* Make sure the absolutely-positioned weather pill doesn't
+     overlap the new wrap layout — push it to a corner that
+     doesn't collide. */
+  .stack.g10 > .card.card-sm > div[style*="position: absolute"] {
+    order: 3;
+    position: static !important;
+    margin-left: auto;
+  }
+
+  /* The contact info line — let it wrap onto multiple lines so
+     long emails don't get cut off. */
+  .stack.g10 > .card.card-sm > .flex-1 > .row.g8.wrap {
+    word-break: break-word;
+  }
+}

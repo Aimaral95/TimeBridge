@@ -22,6 +22,7 @@ const GEO_PREFIX = 'tb_geo_'
 const WX_PREFIX  = 'tb_wx_'
 const WX_TTL_MS  = 10 * 60 * 1000   // 10 minutes
 const GEO_URL    = 'https://geocoding-api.open-meteo.com/v1/search'
+const NOMINATIM_SEARCH_URL = 'https://nominatim.openstreetmap.org/search'
 const FORECAST_URL = 'https://api.open-meteo.com/v1/forecast'
 
 /* ── WMO weather code → label + Lucide icon name ─────────────────── */
@@ -61,17 +62,44 @@ export async function geocode(city, country) {
   const cached = _readJson(key)
   if (cached?.latitude != null && cached?.longitude != null) return cached
 
-  const u = new URL(GEO_URL)
-  u.searchParams.set('name',  city)
-  u.searchParams.set('count', '1')
-  u.searchParams.set('language', 'en')
-  if (country) u.searchParams.set('countryCode', '')   // hint only — name match is enough
-  const r = await fetch(u)
-  if (!r.ok) throw new Error(`Geocoding failed (${r.status})`)
-  const data = await r.json()
-  const top = data?.results?.[0]
-  if (!top) return null
-  const out = { latitude: top.latitude, longitude: top.longitude, name: top.name, country: top.country }
+  let out = null
+
+  const openMeteo = new URL(GEO_URL)
+  openMeteo.searchParams.set('name',  city)
+  openMeteo.searchParams.set('count', '1')
+  openMeteo.searchParams.set('language', 'en')
+  const openMeteoRes = await fetch(openMeteo)
+  if (openMeteoRes.ok) {
+    const data = await openMeteoRes.json()
+    const top = data?.results?.[0]
+    if (top) {
+      out = {
+        latitude: top.latitude,
+        longitude: top.longitude,
+        name: top.name,
+        country: top.country,
+      }
+    }
+  }
+
+  if (!out) {
+    const nominatim = new URL(NOMINATIM_SEARCH_URL)
+    nominatim.searchParams.set('format', 'jsonv2')
+    nominatim.searchParams.set('limit', '1')
+    nominatim.searchParams.set('q', [city, country].filter(Boolean).join(', '))
+    const nominatimRes = await fetch(nominatim, { headers: { 'Accept': 'application/json' } })
+    if (!nominatimRes.ok) throw new Error(`Geocoding failed (${nominatimRes.status})`)
+    const data = await nominatimRes.json()
+    const top = data?.[0]
+    if (!top) return null
+    out = {
+      latitude: Number(top.lat),
+      longitude: Number(top.lon),
+      name: city,
+      country,
+    }
+  }
+
   _writeJson(key, out)
   return out
 }

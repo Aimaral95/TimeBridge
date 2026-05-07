@@ -1,4 +1,5 @@
 import { createContext, useContext, useState, useEffect } from 'react'
+import { api } from '../api/client'
 
 const Ctx = createContext(null)
 
@@ -7,10 +8,25 @@ export function AuthProvider({ children }) {
   const [loading, setLoading] = useState(true)
 
   useEffect(() => {
-    const t = localStorage.getItem('tb_token')
-    const u = localStorage.getItem('tb_user')
-    if (t && u) try { setUser(JSON.parse(u)) } catch {}
-    setLoading(false)
+    const token = localStorage.getItem('tb_token')
+    if (!token) { setLoading(false); return }
+
+    const cached = localStorage.getItem('tb_user')
+    if (cached) {
+      try { setUser(JSON.parse(cached)) } catch {}
+    }
+
+    api.getMe()
+      .then(d => {
+        setUser(d.user)
+        try { localStorage.setItem('tb_user', JSON.stringify(d.user)) } catch {}
+      })
+      .catch(() => {
+        localStorage.removeItem('tb_token')
+        localStorage.removeItem('tb_user')
+        setUser(null)
+      })
+      .finally(() => setLoading(false))
   }, [])
 
   function login(token, userData) {
@@ -19,10 +35,12 @@ export function AuthProvider({ children }) {
     setUser(userData)
   }
 
-  function updateUser(userData) {
-    const merged = { ...user, ...userData }
-    localStorage.setItem('tb_user', JSON.stringify(merged))
-    setUser(merged)
+  function updateUser(patch) {
+    setUser(prev => {
+      const next = { ...prev, ...patch }
+      try { localStorage.setItem('tb_user', JSON.stringify(next)) } catch {}
+      return next
+    })
   }
 
   function logout() {
