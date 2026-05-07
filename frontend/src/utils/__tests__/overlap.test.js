@@ -1,6 +1,7 @@
 import { describe, it, expect } from 'vitest'
 import {
   buildOverlapRows, coalesceRows, connectionAvailableAt, sameFreeSet, scoreWindow, rankWindows, HOUR_MS,
+  upcomingOverlapRange,
 } from '../overlap.js'
 
 const base = new Date('2026-04-30T09:00:00Z')
@@ -61,6 +62,26 @@ describe('availability filtering', () => {
       userTz: 'America/Chicago',
     })
     expect(out.map(r => r.iso)).toEqual([visible])
+  })
+
+  it('can filter out past slots with an explicit upcoming range', () => {
+    const past = '2026-04-28T14:00:00.000Z'
+    const future = '2026-05-08T13:00:00.000Z'
+    const jane = { other_id: 6, other_name: 'Jane' }
+    const out = buildOverlapRows({
+      mine: [past, future],
+      connections: [jane],
+      theirs: { 6: new Set([past, future]) },
+      rangeStart: new Date('2026-05-07T05:00:00.000Z'),
+      rangeEnd: new Date('2026-05-14T05:00:00.000Z'),
+    })
+    expect(out.map(r => r.iso)).toEqual([future])
+  })
+
+  it('starts the upcoming overlap range at today in the user timezone', () => {
+    const range = upcomingOverlapRange(new Date('2026-05-07T18:00:00.000Z'), 'America/Chicago')
+    expect(range.start.toISOString()).toBe('2026-05-07T05:00:00.000Z')
+    expect(range.end.toISOString()).toBe('2026-05-13T05:00:00.000Z')
   })
 })
 

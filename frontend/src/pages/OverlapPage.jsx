@@ -4,7 +4,7 @@ import { Moon, Sun, Users, Clock, AlertTriangle, SearchX, Check, ArrowRight, Spa
 import { api } from '../api/client'
 import { useAuth } from '../context/AuthContext'
 import { loadQuietHours } from '../utils/quietHours'
-import { buildOverlapRows, coalesceRows, rankWindows } from '../utils/overlap'
+import { buildOverlapRows, coalesceRows, rankWindows, upcomingOverlapRange } from '../utils/overlap'
 import { datePartsInTz } from '../utils/tz'
 
 /* ─────────────────────────────────────────────────────────────────
@@ -99,6 +99,7 @@ export default function OverlapPage() {
   const [hideQuiet, setHideQuiet] = useState(true)
   const quiet = useMemo(() => user?.quiet_hours || loadQuietHours(user?.id), [user?.id, user?.quiet_hours])
   const userTz = user?.timezone || 'UTC'
+  const overlapRange = useMemo(() => upcomingOverlapRange(new Date(), userTz), [userTz])
 
   // Mark "user has visited the overlap page" so the Dashboard onboarding
   // checklist can tick this step off, regardless of how they arrived here.
@@ -147,8 +148,18 @@ export default function OverlapPage() {
   }, [])
 
   const rows = useMemo(() => {
-    return buildOverlapRows({ mine, connections, theirs, filterWith, quiet, userTz, hideQuiet })
-  }, [mine, theirs, connections, filterWith, hideQuiet, quiet, userTz])
+    return buildOverlapRows({
+      mine,
+      connections,
+      theirs,
+      filterWith,
+      quiet,
+      userTz,
+      hideQuiet,
+      rangeStart: overlapRange.start,
+      rangeEnd: overlapRange.end,
+    })
+  }, [mine, theirs, connections, filterWith, hideQuiet, quiet, userTz, overlapRange])
 
   // Coalesce contiguous rows with identical free-set into windows, then rank.
   const windows = useMemo(() => coalesceRows(rows), [rows])

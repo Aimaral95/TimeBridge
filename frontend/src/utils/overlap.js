@@ -1,4 +1,4 @@
-import { wallClockInTz } from './tz.js'
+import { datePartsInTz, wallClockInTz, zonedTimeToUtc } from './tz.js'
 
 /* ─────────────────────────────────────────────────────────────────
    overlap.js — pure functions for the Overlap page.
@@ -21,6 +21,7 @@ import { wallClockInTz } from './tz.js'
    ───────────────────────────────────────────────────────────────── */
 
 export const HOUR_MS = 60 * 60 * 1000
+const DAY_MS = 24 * HOUR_MS
 
 /** Two free-sets are equivalent iff they contain the same other_id values. */
 export function sameFreeSet(a, b) {
@@ -52,10 +53,16 @@ export function buildOverlapRows({
   quiet = null,
   userTz = 'UTC',
   hideQuiet = true,
+  rangeStart = null,
+  rangeEnd = null,
 } = {}) {
   const rows = []
+  const startMs = rangeStart ? new Date(rangeStart).getTime() : -Infinity
+  const endMs = rangeEnd ? new Date(rangeEnd).getTime() : Infinity
   for (const iso of mine) {
     const when = new Date(iso)
+    const time = when.getTime()
+    if (time < startMs || time >= endMs) continue
     if (hideQuiet && inQuietWindowAt(when, quiet, userTz)) continue
 
     const free = []
@@ -67,6 +74,18 @@ export function buildOverlapRows({
   }
   rows.sort((a, b) => a.when - b.when)
   return rows
+}
+
+export function upcomingOverlapRange(now = new Date(), userTz = 'UTC') {
+  const today = datePartsInTz(now, userTz)
+  const start = zonedTimeToUtc(today.year, today.month, today.day, 0, 0, userTz)
+  const dayIndex = ['Sun','Mon','Tue','Wed','Thu','Fri','Sat'].indexOf(wallClockInTz(start, userTz).dayKey)
+  const daysThroughThisWeek = 7 - Math.max(dayIndex, 0)
+  const daysToShow = daysThroughThisWeek + 3
+  return {
+    start,
+    end: new Date(start.getTime() + daysToShow * DAY_MS),
+  }
 }
 
 /**
