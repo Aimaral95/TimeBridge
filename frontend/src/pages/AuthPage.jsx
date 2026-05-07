@@ -6,6 +6,7 @@ import { useAuth } from '../context/AuthContext'
 import { useToast } from '../context/ToastContext'
 import { TzSelect, detectTz } from '../utils/timezones'
 import { detectLocation } from '../utils/geoLocate'
+import LocationSearch from '../components/LocationSearch'
 
 function LoginForm({ onSwitch }) {
   const [form, setForm] = useState({ email: '', password: '', twofa_code: '' })
@@ -142,7 +143,12 @@ function RegisterForm({ onSwitch }) {
       // Backend now returns city/country on login too, so trust d.user. Fall
       // back to the form values just in case the backend hasn't been restarted
       // since the schema additions.
-      login(d.token, { city: form.city, country: form.country, ...d.user })
+      login(d.token, {
+        ...d.user,
+        city: d.user?.city || form.city,
+        country: d.user?.country || form.country,
+        timezone: d.user?.timezone || form.timezone,
+      })
       toast('Welcome to TimeBridge', 'Account created successfully')
       navigate('/')
     } catch (err) { setError(err.message) }
@@ -204,16 +210,16 @@ function RegisterForm({ onSwitch }) {
             {detecting ? <span className="spinner"/> : <MapPin size={12} strokeWidth={2} aria-hidden="true" />} Auto-detect
           </button>
         </div>
-        <div className="grid-2" style={{ gap:10 }}>
-          <div className="form-group">
-            <input type="text" className="form-input" placeholder="City (e.g. Almaty)"
-              value={form.city} onChange={set('city')} />
-          </div>
-          <div className="form-group">
-            <input type="text" className="form-input" placeholder="Country (e.g. Kazakhstan)"
-              value={form.country} onChange={set('country')} />
-          </div>
-        </div>
+        <LocationSearch
+          city={form.city}
+          country={form.country}
+          onSelect={loc => setForm(f => ({
+            ...f,
+            city: loc.city || f.city,
+            country: loc.country || f.country,
+            timezone: loc.timezone || f.timezone,
+          }))}
+        />
       </div>
       <div className="form-group">
         <label className="form-label">

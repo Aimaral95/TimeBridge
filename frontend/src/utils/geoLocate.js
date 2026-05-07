@@ -15,6 +15,7 @@
    ───────────────────────────────────────────────────────────────── */
 
 const NOMINATIM = 'https://nominatim.openstreetmap.org/reverse'
+const OPEN_METEO_SEARCH = 'https://geocoding-api.open-meteo.com/v1/search'
 
 export function detectTimezone() {
   try {
@@ -62,6 +63,36 @@ export async function reverseGeocode(lat, lon) {
     a.hamlet || a.suburb || a.county || ''
   const country = a.country || ''
   return { city, country }
+}
+
+export async function searchLocations(query) {
+  const q = String(query || '').trim()
+  if (q.length < 2) return []
+
+  const url = new URL(OPEN_METEO_SEARCH)
+  url.searchParams.set('name', q)
+  url.searchParams.set('count', '8')
+  url.searchParams.set('language', 'en')
+  url.searchParams.set('format', 'json')
+
+  let res
+  try {
+    res = await fetch(url)
+  } catch {
+    throw new Error('Network error while searching locations.')
+  }
+  if (!res.ok) throw new Error(`Location search failed (${res.status})`)
+
+  const data = await res.json()
+  return (data?.results || []).map(place => ({
+    id: place.id,
+    city: place.name || '',
+    country: place.country || '',
+    admin: [place.admin1, place.admin2].filter(Boolean).join(', '),
+    timezone: place.timezone || '',
+    latitude: place.latitude,
+    longitude: place.longitude,
+  })).filter(place => place.city && place.country)
 }
 
 /** One-call helper: GPS → reverse geocode → tz fallback. */

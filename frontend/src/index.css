@@ -220,6 +220,37 @@ button { font-family: 'DM Sans', sans-serif; }
 .form-input::placeholder { color: var(--text3); }
 .form-input:disabled { opacity: .5; cursor: not-allowed; }
 select.form-input { cursor: pointer; }
+.loc-search { position: relative; }
+.loc-search-spin { position: absolute; top: 11px; right: 12px; color: var(--text2); }
+.loc-menu {
+  position: absolute;
+  left: 0; right: 0; top: calc(100% + 6px);
+  max-height: 220px;
+  overflow-y: auto;
+  background: var(--surface);
+  border: 1px solid var(--border2);
+  border-radius: var(--r2);
+  box-shadow: var(--shadow);
+  z-index: 50;
+  padding: 4px;
+}
+.loc-option {
+  width: 100%;
+  display: flex;
+  align-items: flex-start;
+  gap: 8px;
+  padding: 9px 10px;
+  border: none;
+  border-radius: var(--r3);
+  background: transparent;
+  color: var(--text);
+  text-align: left;
+  cursor: pointer;
+}
+.loc-option:hover { background: var(--surface2); }
+.loc-option svg { color: var(--accent); flex: 0 0 auto; margin-top: 2px; }
+.loc-main { display: block; font-size: 13px; font-weight: 500; }
+.loc-sub { display: block; margin-top: 2px; font-size: 11px; color: var(--text2); }
 
 /* Status pills */
 .pill { display: inline-flex; align-items: center; gap: 5px; padding: 3px 9px; border-radius: 100px; font-size: 11px; font-weight: 500; border: 1px solid; }

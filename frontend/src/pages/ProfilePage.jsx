@@ -7,6 +7,7 @@ import { useToast } from '../context/ToastContext'
 import { TzSelect, detectTz } from '../utils/timezones'
 import { detectLocation } from '../utils/geoLocate'
 import { loadQuietHours, saveQuietHours, DEFAULT_QUIET } from '../utils/quietHours'
+import LocationSearch from '../components/LocationSearch'
 
 export default function ProfilePage() {
   const { updateUser, logout } = useAuth()
@@ -56,6 +57,21 @@ export default function ProfilePage() {
       toast('Could not detect', e.message)
     } finally {
       setDetecting(false)
+    }
+  }
+
+  async function selectLocation(loc) {
+    const nextForm = {
+      ...form,
+      city: loc.city || form.city,
+      country: loc.country || form.country,
+      timezone: loc.timezone || form.timezone,
+    }
+    setForm(nextForm)
+    try {
+      await saveProfile(nextForm, 'Location updated')
+    } catch (e) {
+      toast('Error', e.message)
     }
   }
 
@@ -169,14 +185,11 @@ export default function ProfilePage() {
                 {detecting ? <span className="spinner"/> : <MapPin size={13} strokeWidth={2} aria-hidden="true" />} Detect
               </button>
             </div>
-            <div className="grid-2" style={{ gap:10 }}>
-              <div className="form-group">
-                <input className="form-input" placeholder="City (e.g. Almaty)" value={form.city} onChange={set('city')} />
-              </div>
-              <div className="form-group">
-                <input className="form-input" placeholder="Country (e.g. Kazakhstan)" value={form.country} onChange={set('country')} />
-              </div>
-            </div>
+            <LocationSearch
+              city={form.city}
+              country={form.country}
+              onSelect={selectLocation}
+            />
           </div>
           <div className="form-group">
             <label className="form-label">
