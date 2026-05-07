@@ -10,12 +10,6 @@ availability.
 
 ---
 
-## Live Demo
-
-https://timebridge-0m5k.onrender.com
-
----
-
 ## Repository layout
 
 ```
@@ -58,23 +52,6 @@ npm test                   # 51 tests / 100% pass at submission
 The frontend `src/api/client.js` expects the backend at
 `http://localhost:5050`. Change the `BASE` constant there if you point at a
 different deployment.
-
----
-
-## Features
-
-- Timezone-aware shared availability computation
-- Ranked overlap recommendations
-- Recurring weekly schedules
-- Quiet-hours filtering and scoring penalties
-- Family connection system with invite codes
-- JWT authentication + optional 2FA
-- Password reset flow
-- RFC 5545 ICS calendar import
-- Weather integration using Open-Meteo
-- Privacy controls per family member
-- Dark/light theme support
-- Unit-tested scheduling and timezone algorithms
 
 ---
 
