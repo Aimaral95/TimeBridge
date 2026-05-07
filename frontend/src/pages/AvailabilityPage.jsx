@@ -5,7 +5,7 @@ import { useToast } from '../context/ToastContext'
 import { useSchedule } from '../context/ScheduleContext'
 import { Tooltip } from '../components/Tooltip'
 
-const HOURS = Array.from({ length: 17 }, (_, i) => i + 7)        // 7am – 11pm
+const HOURS = Array.from({ length: 24 }, (_, i) => i)            // 12am – 11pm
 const DAYS  = ['Sun','Mon','Tue','Wed','Thu','Fri','Sat']
 
 function getWeekDates(offset = 0) {
@@ -20,7 +20,9 @@ function slotKey(date, hour) {
   const d = new Date(date); d.setHours(hour, 0, 0, 0); return d.toISOString()
 }
 function fmtHour(h) {
-  if (h===12) return '12 PM'; return h>12 ? `${h-12} PM` : `${h} AM`
+  if (h === 0) return '12 AM'
+  if (h === 12) return '12 PM'
+  return h > 12 ? `${h - 12} PM` : `${h} AM`
 }
 function isToday(d) { return d.toDateString() === new Date().toDateString() }
 
@@ -202,7 +204,7 @@ export default function AvailabilityPage() {
   }, [activeConnId, selected, theirSlots])
 
   return (
-    <div style={{ maxWidth:960, margin:'0 auto' }} className="page-wrap fade-up">
+    <div style={{ maxWidth:960, margin:'0 auto' }} className="page-wrap fade-up availability-page">
       <div className="page-header">
         <div>
           <div className="page-title">Availability</div>
@@ -314,61 +316,63 @@ export default function AvailabilityPage() {
       </div>
 
       {/* Calendar */}
-      <div
-        className="cal-grid"
-        onMouseUp={stopDrag}
-        onMouseLeave={stopDrag}
-        style={{ userSelect:'none' }}
-      >
-        {/* Corner */}
-        <div style={{ background:'var(--surface2)' }}/>
-        {/* Day headers */}
-        {weekDates.map((date, i) => (
-          <div key={i} className="cal-head" onClick={() => toggleDay(date)}>
-            <div className="text-xs text-2" style={{ textTransform:'uppercase', letterSpacing:'.05em', marginBottom:3 }}>
-              {DAYS[date.getDay()]}
+      <div className="grid-scroll">
+        <div
+          className="cal-grid"
+          onMouseUp={stopDrag}
+          onMouseLeave={stopDrag}
+          style={{ userSelect:'none' }}
+        >
+          {/* Corner */}
+          <div style={{ background:'var(--surface2)' }}/>
+          {/* Day headers */}
+          {weekDates.map((date, i) => (
+            <div key={i} className="cal-head" onClick={() => toggleDay(date)}>
+              <div className="text-xs text-2" style={{ textTransform:'uppercase', letterSpacing:'.05em', marginBottom:3 }}>
+                {DAYS[date.getDay()]}
+              </div>
+              <div className={`cal-day-num ${isToday(date)?'cal-today':''}`}>{date.getDate()}</div>
             </div>
-            <div className={`cal-day-num ${isToday(date)?'cal-today':''}`}>{date.getDate()}</div>
-          </div>
-        ))}
+          ))}
 
-        {/* Hour rows */}
-        {HOURS.map(hour => (
-          <>
-            <div key={`t${hour}`} className="cal-hr" onClick={() => toggleHour(hour)}>
-              {fmtHour(hour)}
-            </div>
-            {weekDates.map((date, di) => {
-              const key = slotKey(date, hour)
-              const mine     = selected.has(key)
-              const sched    = scheduleBusy.has(key)
-              const theirs   = activeConnId && theirSlots.has(key)
-              const both     = mine && theirs
+          {/* Hour rows */}
+          {HOURS.map(hour => (
+            <>
+              <div key={`t${hour}`} className="cal-hr" onClick={() => toggleHour(hour)}>
+                {fmtHour(hour)}
+              </div>
+              {weekDates.map((date, di) => {
+                const key = slotKey(date, hour)
+                const mine     = selected.has(key)
+                const sched    = scheduleBusy.has(key)
+                const theirs   = activeConnId && theirSlots.has(key)
+                const both     = mine && theirs
 
-              // Slot styling layers — `both` wins, then `theirs`, then mine, then schedule-busy.
-              const cls = [
-                'cal-slot',
-                mine && !theirs ? 'free' : '',
-                theirs && !mine ? 'theirs' : '',
-                both ? 'both' : '',
-                !mine && sched ? 'sched-busy' : '',
-              ].filter(Boolean).join(' ')
+                // Slot styling layers — `both` wins, then `theirs`, then mine, then schedule-busy.
+                const cls = [
+                  'cal-slot',
+                  mine && !theirs ? 'free' : '',
+                  theirs && !mine ? 'theirs' : '',
+                  both ? 'both' : '',
+                  !mine && sched ? 'sched-busy' : '',
+                ].filter(Boolean).join(' ')
 
-              return (
-                <div
-                  key={`${hour}-${di}`}
-                  className={cls}
-                  title={sched && !mine ? 'Busy from schedule (click to override)' : undefined}
-                  onMouseDown={() => startDrag(key)}
-                  onMouseEnter={() => dragOver(key)}
-                />
-              )
-            })}
-          </>
-        ))}
+                return (
+                  <div
+                    key={`${hour}-${di}`}
+                    className={cls}
+                    title={sched && !mine ? 'Busy from schedule (click to override)' : undefined}
+                    onMouseDown={() => startDrag(key)}
+                    onMouseEnter={() => dragOver(key)}
+                  />
+                )
+              })}
+            </>
+          ))}
+        </div>
       </div>
 
-      <p className="text-xs text-2 mt12" style={{ textAlign:'center' }}>
+      <p className="text-xs text-2 mt12 calendar-help">
         Click a day name or hour to toggle the whole row/column · drag across cells to select multiple ·
         red cells = busy from your schedule (click to free yourself)
       </p>

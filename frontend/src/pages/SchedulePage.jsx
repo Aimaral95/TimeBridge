@@ -9,7 +9,7 @@ import { parseIcs } from '../utils/icsParser'
 import { browserTz } from '../utils/tz'
 
 const DAYS = ['Mon','Tue','Wed','Thu','Fri','Sat','Sun']
-const HOURS = ['08:00','09:00','10:00','11:00','12:00','13:00','14:00','15:00','16:00','17:00','18:00','19:00','20:00']
+const HOURS = Array.from({ length: 24 }, (_, i) => `${String(i).padStart(2, '0')}:00`)
 
 // User-pickable palette. Keep small so the grid looks consistent.
 const COLOR_PALETTE = [
@@ -177,34 +177,36 @@ export default function SchedulePage() {
 
       {/* Week grid */}
       <div className="card mb20">
-        <div className="sched-grid">
-          <div className="sg-head"></div>
-          {DAYS.map(d => <div key={d} className="sg-head">{d}</div>)}
-          {HOURS.map(time => (
-            <>
-              <div key={time} className="sg-time">{time}</div>
-              {DAYS.map(d => {
-                const b = grid[time]?.[d]
-                const c = b ? colorFor(b) : null
-                return (
-                  <div key={`${time}-${d}`} className="sg-cell">
-                    {b && (
-                      <div
-                        className="sched-block"
-                        style={{
-                          background: c + '33',  // ~20% opacity
-                          color: c,
-                          borderLeft: `3px solid ${c}`,
-                        }}
-                      >
-                        {b.title.replace(/^[^\w]+\s*/, '')}
-                      </div>
-                    )}
-                  </div>
-                )
-              })}
-            </>
-          ))}
+        <div className="grid-scroll">
+          <div className="sched-grid">
+            <div className="sg-head"></div>
+            {DAYS.map(d => <div key={d} className="sg-head">{d}</div>)}
+            {HOURS.map(time => (
+              <>
+                <div key={time} className="sg-time">{time}</div>
+                {DAYS.map(d => {
+                  const b = grid[time]?.[d]
+                  const c = b ? colorFor(b) : null
+                  return (
+                    <div key={`${time}-${d}`} className="sg-cell">
+                      {b && (
+                        <div
+                          className="sched-block"
+                          style={{
+                            background: c + '33',  // ~20% opacity
+                            color: c,
+                            borderLeft: `3px solid ${c}`,
+                          }}
+                        >
+                          {b.title.replace(/^[^\w]+\s*/, '')}
+                        </div>
+                      )}
+                    </div>
+                  )
+                })}
+              </>
+            ))}
+          </div>
         </div>
         {/* Legend now reflects the actual types the user has created. */}
         <div style={{ marginTop:12, display:'flex', gap:16, flexWrap:'wrap' }}>

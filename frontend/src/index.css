@@ -385,6 +385,7 @@ select.form-input { cursor: pointer; }
 .chip-blue:hover { background: linear-gradient(180deg, #6cb6ff 0%, #388bfd 100%); }
 
 /* Schedule grid */
+.grid-scroll { overflow-x: auto; overscroll-behavior-x: contain; }
 .sched-grid { display: grid; grid-template-columns: 52px repeat(7,1fr); gap: 1px; background: var(--border); border-radius: var(--r2); overflow: hidden; font-size: 11px; user-select: none; }
 .sg-head { background: var(--surface2); padding: 8px 4px; text-align: center; font-weight: 600; font-size: 11px; color: var(--text2); }
 .sg-time { background: var(--surface2); padding: 4px 6px; text-align: right; color: var(--text3); font-size: 10px; }
@@ -561,6 +562,7 @@ svg.chevron { display: inline-block; }
 .cal-slot { background: var(--surface); min-height: 34px; cursor: pointer; transition: background .07s; }
 .cal-slot.free { background: rgba(63,185,80,.25); }
 .cal-slot:hover:not(.free) { background: rgba(63,185,80,.1); }
+.calendar-help { text-align: center; max-width: 100%; line-height: 1.5; }
 
 /* Overlap */
 .ov-slot { display: flex; align-items: center; gap: 12px; padding: 12px 16px; background: var(--surface); border: 1px solid var(--border); border-radius: var(--r2); }
@@ -631,7 +633,19 @@ svg.chevron { display: inline-block; }
   /* Page header */
   .page-title { font-size: 19px; }
   .page-subtitle { font-size: 12px; }
-  .page-wrap { padding: 16px 14px; }
+  .page-wrap { padding: 16px 14px; overflow-x: hidden; }
+  .page-header {
+    flex-direction: column;
+    gap: 12px;
+  }
+  .header-actions {
+    width: 100%;
+    flex-wrap: wrap;
+  }
+  .header-actions .btn {
+    flex: 1 1 auto;
+    min-width: 0;
+  }
 
   /* Big numbers shrink */
   .big-time { font-size: 24px; }
@@ -643,12 +657,65 @@ svg.chevron { display: inline-block; }
   .avail-opt .av-icon { font-size: 16px; }
   .avail-opt .av-label { font-size: 9px; }
 
-  /* Schedule + calendar grids — narrower hour column, smaller cells */
-  .sched-grid, .cal-grid { grid-template-columns: 38px repeat(7,1fr); }
-  .sg-time, .cal-hr { font-size: 9px; padding: 3px 4px; }
-  .sg-cell, .cal-slot { min-height: 28px; }
-  .sched-block { font-size: 8px; padding: 1px 3px; }
-  .cal-day-num { width: 22px; height: 22px; font-size: 11px; }
+  /* Schedule + availability grids keep tap-friendly columns and scroll
+     sideways instead of squeezing 7 days into a tiny viewport. */
+  .grid-scroll {
+    width: 100%;
+    max-width: 100%;
+    padding: 0 0 8px;
+    overflow-x: scroll;
+    overflow-y: hidden;
+    touch-action: auto;
+    overscroll-behavior-x: contain;
+    overscroll-behavior-y: auto;
+    -webkit-overflow-scrolling: touch;
+    border-radius: var(--r2);
+  }
+  .grid-scroll::after {
+    content: '';
+    position: sticky;
+    right: 0;
+    display: block;
+    width: 24px;
+    height: 1px;
+    margin-top: -1px;
+    margin-left: auto;
+    background: linear-gradient(90deg, transparent, var(--surface));
+    pointer-events: none;
+  }
+  .sched-grid, .cal-grid {
+    grid-template-columns: 48px repeat(7, 72px);
+    width: max-content;
+    min-width: max-content;
+  }
+  .sg-time, .cal-hr { font-size: 9px; padding: 4px 5px; }
+  .sg-cell, .cal-slot { min-height: 32px; }
+  .sched-block { font-size: 8px; padding: 2px 3px; }
+  .cal-day-num { width: 24px; height: 24px; font-size: 11px; }
+  .calendar-help {
+    text-align: left;
+    white-space: normal;
+    overflow-wrap: anywhere;
+    padding: 0 2px 8px;
+  }
+  .availability-page {
+    max-width: 100vw !important;
+    overflow-x: clip;
+  }
+  .availability-page > *:not(.grid-scroll) {
+    max-width: 100%;
+  }
+  .availability-page .card,
+  .availability-page .row,
+  .availability-page .stack {
+    min-width: 0;
+    max-width: 100%;
+  }
+  .availability-page .grid-scroll {
+    overflow-x: auto;
+    overflow-y: visible;
+    max-width: 100%;
+  }
 
   /* Cards / forms */
   .card { padding: 14px; border-radius: var(--r2); }
@@ -772,5 +839,60 @@ svg.chevron { display: inline-block; }
 
   .pending-invite-row > .btn svg {
     flex: 0 0 auto;
+  }
+
+  /* Overlap page: keep long names/actions inside the viewport. */
+  .overlap-page {
+    max-width: 100vw;
+    overflow-x: clip;
+  }
+
+  .overlap-page .card,
+  .overlap-page .empty-state,
+  .overlap-page .stack,
+  .overlap-page .row {
+    max-width: 100%;
+    min-width: 0;
+  }
+
+  .overlap-page .btn,
+  .overlap-page .chip,
+  .overlap-page .tag {
+    white-space: normal;
+    overflow-wrap: anywhere;
+  }
+
+  .overlap-page .chip {
+    max-width: 100%;
+    min-width: 0;
+  }
+
+  .overlap-page .chip .avatar {
+    flex: 0 0 auto;
+  }
+
+  .overlap-page .ov-slot {
+    flex-wrap: wrap;
+    align-items: flex-start;
+    min-width: 0;
+    max-width: 100%;
+    overflow: hidden;
+  }
+
+  .overlap-page .ov-slot > div {
+    min-width: 0;
+  }
+
+  .overlap-page .ov-slot > div:last-child {
+    width: 100%;
+    min-width: 0;
+    flex-shrink: 1 !important;
+    justify-content: flex-start;
+    flex-wrap: wrap;
+  }
+
+  .overlap-page .text-sm,
+  .overlap-page .text-xs {
+    overflow-wrap: anywhere;
   }
 }

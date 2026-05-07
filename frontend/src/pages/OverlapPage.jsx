@@ -206,7 +206,7 @@ export default function OverlapPage() {
   }, [connections])
 
   if (loading) return (
-    <div className="page-wrap fade-up">
+    <div className="page-wrap fade-up overlap-page">
       <div className="page-header">
         <div>
           <div className="page-title">When can we talk?</div>
@@ -244,7 +244,7 @@ export default function OverlapPage() {
     : null
 
   return (
-    <div className="page-wrap fade-up">
+    <div className="page-wrap fade-up overlap-page">
       <div className="page-header">
         <div>
           <div className="page-title">When can we talk?</div>
