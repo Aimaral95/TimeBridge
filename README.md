@@ -61,6 +61,23 @@ different deployment.
 
 ---
 
+## Features
+
+- Timezone-aware shared availability computation
+- Ranked overlap recommendations
+- Recurring weekly schedules
+- Quiet-hours filtering and scoring penalties
+- Family connection system with invite codes
+- JWT authentication + optional 2FA
+- Password reset flow
+- RFC 5545 ICS calendar import
+- Weather integration using Open-Meteo
+- Privacy controls per family member
+- Dark/light theme support
+- Unit-tested scheduling and timezone algorithms
+
+---
+
 ## What's in here
 
 The frontend is a React SPA with hand-written CSS, Lucide icons, and Radix UI
